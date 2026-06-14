@@ -1,29 +1,8 @@
 # Spec Reviewer
 
-Local-first Markdown spec reviewer for source-anchored feedback.
+Local-first Markdown spec reviewer for source-anchored agent feedback.
 
-![Spec Reviewer screenshot](docs/assets/screenshot.jpg)
-
-Spec Reviewer runs on your machine, opens local Markdown files, lets you annotate
-rendered or source text by line, tracks whether saved anchors drift after the
-file changes, and exports clean Markdown feedback for an agent or teammate.
-
-## Features
-
-- Open any local `.md` or `.markdown` file.
-- Drop a Markdown file into the start screen, or paste a local file path.
-- Read rendered Markdown by default with a source toggle for line inspection.
-- Add line, block, or text-selection anchored annotations.
-- See inline note markers and per-note anchor drift state.
-- Preview fenced HTML/SVG artifacts only after an explicit sandboxed render.
-- Reopen previous reviews from the recent reviews list.
-- Export Markdown instructions grouped by severity.
-- Run as a loopback-only bundled binary for users, with a Node/Vite dev setup
-  for contributors.
-
-## User Install
-
-The public install path is the shared `acartag7/tap` Homebrew tap:
+## Install With Homebrew
 
 ```bash
 brew tap acartag7/tap
@@ -31,8 +10,40 @@ brew install spec-reviewer
 spec-reviewer review path/to/spec.md
 ```
 
-The release artifact is a Bun-compiled binary, so normal users should not need
-to manage Node, pnpm, or project dependencies.
+Homebrew installs a bundled binary. You do not need Node, pnpm, Bun, or project
+dependencies to use the app.
+
+![Spec Reviewer showing a local review with open notes and agent export](docs/assets/screenshot.jpg)
+
+## Agent Handoff
+
+```bash
+spec-reviewer review path/to/spec.md --wait --json
+```
+
+`--wait` keeps the command open until the human clicks Finish Review or Cancel.
+On finish, the command prints Markdown feedback for the agent to apply.
+
+## What It Does
+
+- Opens local `.md` and `.markdown` files.
+- Lets you review rendered Markdown or source lines.
+- Adds line, block, or selected-text notes.
+- Tracks whether saved anchors are current, moved, or missing after edits.
+- Reopens previous reviews from local state.
+- Exports agent-ready Markdown feedback grouped by severity.
+- Runs loopback-only from a bundled binary.
+
+## Agent Skill Install
+
+```bash
+spec-reviewer skill install --target codex
+spec-reviewer skill install --target claude
+spec-reviewer skill print --target codex
+```
+
+Skill install backs up existing files before overwriting. User scope writes to
+the agent's home skills directory; project scope writes under the current repo.
 
 ## Development Requirements
 
@@ -86,17 +97,6 @@ pnpm run build:binary
 ./build/spec-reviewer review path/to/spec.md
 ./build/spec-reviewer review path/to/spec.md --wait --json
 ```
-
-## Install Agent Skills
-
-```bash
-spec-reviewer skill install --target codex
-spec-reviewer skill install --target claude
-spec-reviewer skill print --target codex
-```
-
-Skill install backs up existing files before overwriting. User scope writes to
-the agent's home skills directory; project scope writes under the current repo.
 
 ## Data Storage
 
