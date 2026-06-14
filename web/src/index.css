@@ -1,0 +1,152 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/jetbrains-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-sev-blocker: var(--sev-blocker);
+  --color-sev-major: var(--sev-major);
+  --color-sev-minor: var(--sev-minor);
+  --color-sev-note: var(--sev-note);
+  --color-ok: var(--ok);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+  --primary: #0a0a0a;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #171717;
+  --muted: #fafafa;
+  --muted-foreground: #5f5f5f;
+  --accent: #f4f4f5;
+  --accent-foreground: #171717;
+  --destructive: #e5484d;
+  --border: #eaeaea;
+  --input: #e4e4e4;
+  --ring: #0a0a0a;
+  --radius: 0.625rem;
+  --sev-blocker: #e5484d;
+  --sev-major: #f59e0b;
+  --sev-minor: #8f8f8f;
+  --sev-note: #8f8f8f;
+  --ok: #1a7f37;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --card: #111111;
+  --card-foreground: #ededed;
+  --popover: #161616;
+  --popover-foreground: #ededed;
+  --primary: #ededed;
+  --primary-foreground: #0a0a0a;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #ededed;
+  --muted: #161616;
+  --muted-foreground: #a1a1a1;
+  --accent: #1f1f1f;
+  --accent-foreground: #ededed;
+  --destructive: #f27070;
+  --border: #232323;
+  --input: #2a2a2a;
+  --ring: #d4d4d4;
+  --sev-blocker: #f27070;
+  --sev-major: #f5b23b;
+  --ok: #3dd68c;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+    font-feature-settings: "ss01", "ss02";
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    margin: 0;
+  }
+
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+}
+
+.review-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.review-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+.review-scroll::-webkit-scrollbar-thumb:hover { background: var(--input); }
+
+.source-line {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr);
+}
+
+.source-line-no {
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.source-line-no::before {
+  content: attr(data-line-number);
+}
+
+.source-line-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.kind-heading .source-line-text {
+  font-family: var(--font-sans);
+  font-weight: 700;
+}
+
+.kind-code .source-line-text {
+  background: color-mix(in srgb, var(--muted) 86%, var(--foreground) 4%);
+}
+
+.kind-blank .source-line-text::after {
+  content: " ";
+}

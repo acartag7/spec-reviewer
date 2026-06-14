@@ -8,7 +8,8 @@ const csp = [
   "img-src 'self' data:",
   "object-src 'none'",
   "script-src 'self'",
-  "style-src 'self'",
+  // Radix and Vite-generated CSS can emit inline style attributes for layout primitives.
+  "style-src 'self' 'unsafe-inline'",
   "frame-ancestors 'none'",
   "form-action 'none'",
 ].join("; ");

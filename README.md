@@ -13,7 +13,7 @@ feedback.
 - Reopen previous reviews from the recent reviews list.
 - Track whether saved notes match the current file digest.
 - Export Markdown instructions that can be pasted back to an agent.
-- Run as a local-only Node server with no runtime npm dependencies.
+- Run as a local-only Node server with a React/Vite frontend.
 
 The next phase is a rendered Markdown reviewer with source-line anchoring,
 sandboxed artifact previews, and stronger per-annotation drift tracking. See
@@ -22,24 +22,22 @@ sandboxed artifact previews, and stronger per-annotation drift tracking. See
 ## Supply Chain Policy
 
 - Use `pnpm` only.
-- Keep runtime dependencies at zero until there is a real blocker.
+- Keep dependencies pinned exactly and add new ones only for a real blocker.
 - `pnpm-workspace.yaml` sets `minimumReleaseAge: 21600` for future installs,
   which means dependency versions must be at least 15 days old.
-- Pin any future dependency exactly. `.npmrc` sets `save-exact=true`.
 - Do not add postinstall-dependent packages without a specific reason.
-
-No install is needed for the current version.
 
 ## Run
 
 ```bash
-pnpm run dev -- ~/project/ductum/specs/current/post-p9-hardening/best-of-n/README.md
+pnpm install
+pnpm run dev
 ```
 
-Open:
+Open the dev app:
 
 ```text
-http://127.0.0.1:3217
+http://127.0.0.1:5173
 ```
 
 The root screen lets you drag/drop a Markdown file, choose one with the file
@@ -63,12 +61,15 @@ tool for a file and export saved feedback after review.
 Useful flags:
 
 ```bash
-pnpm run dev -- --port 3220 path/to/spec.md
-pnpm run dev -- --storage-dir ~/.spec-reviewer path/to/spec.md
+pnpm run build
+pnpm start -- --port 3220 path/to/spec.md
+pnpm start -- --storage-dir ~/.spec-reviewer path/to/spec.md
 ```
 
-The server only binds to loopback hosts because the API can read local Markdown
-files by path. It also rejects non-loopback Host/Origin headers and sends a CSP.
+The production server serves the built app and API from `127.0.0.1:3217` by
+default. The server only binds to loopback hosts because the API can read local
+Markdown files by path. It also rejects non-loopback Host/Origin headers and
+sends a CSP.
 
 ## Verify
 

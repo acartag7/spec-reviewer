@@ -1,5 +1,8 @@
 node_modules/
 dist/
+.design/
+.codex/
+.pnpm-store*/
 coverage/
 .DS_Store
 *.log

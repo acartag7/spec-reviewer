@@ -11,8 +11,8 @@ const service = new ReviewerService(
   new FileDocumentReader(),
   new JsonReviewStore(config.storageDir),
 );
-const publicDir = resolve(fileURLToPath(new URL("../public", import.meta.url)));
-const server = createHttpServer(config, service, publicDir);
+const staticDir = resolve(fileURLToPath(new URL("../dist", import.meta.url)));
+const server = createHttpServer(config, service, staticDir);
 
 server.listen(config.port, config.host, () => {
   const url = `http://${config.host}:${config.port}`;

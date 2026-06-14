@@ -3,13 +3,14 @@ import { join, relative } from "node:path";
 import { loadConfig } from "../config.ts";
 
 const maxLines = loadConfig([]).source.maxFileLines;
-const roots = ["src", "public", "test"];
-const extensions = new Set([".ts", ".js", ".css", ".html"]);
+const roots = ["src", "web/src", "test"];
+const extensions = new Set([".ts", ".tsx", ".js", ".css", ".html"]);
 const failures: string[] = [];
 
 for (const root of roots) {
   for (const filePath of listFiles(join(process.cwd(), root))) {
     if (!matchesExtension(filePath)) continue;
+    if (isExcluded(filePath)) continue;
     const text = readFileSync(filePath, "utf8");
     const lineCount = text.endsWith("\n")
       ? text.split("\n").length - 1
@@ -37,4 +38,9 @@ function matchesExtension(filePath: string): boolean {
     if (filePath.endsWith(extension)) return true;
   }
   return false;
+}
+
+function isExcluded(filePath: string): boolean {
+  const normalized = filePath.replaceAll("\\", "/");
+  return normalized.includes("/components/ui/") || normalized.includes("/dist/");
 }
