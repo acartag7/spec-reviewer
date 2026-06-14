@@ -38,6 +38,10 @@
     "build:server": "node -e \"require('node:fs').rmSync('build',{recursive:true,force:true})\" && tsc -p tsconfig.server.json",
     "binary:smoke": "node scripts/binary-smoke.js",
     "dev": "concurrently -k -n api,web \"node --no-warnings src/server.ts\" \"vite --config web/vite.config.ts --host 127.0.0.1\"",
+    "release:artifacts": "node scripts/package-release.js",
+    "release:artifacts:all": "node scripts/package-release.js --target bun-darwin-arm64 --target bun-darwin-x64 --target bun-linux-x64-baseline --target bun-linux-arm64",
+    "homebrew:smoke": "scripts/homebrew-smoke.sh",
+    "tap:update": "node scripts/update-homebrew-tap.js",
     "start": "node --no-warnings src/server.ts",
     "test": "node --no-warnings --test test/*.test.ts && vitest run --config web/vite.config.ts"
   },

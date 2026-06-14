@@ -87,6 +87,17 @@ pnpm run build:binary
 ./build/spec-reviewer review path/to/spec.md --wait --json
 ```
 
+## Install Agent Skills
+
+```bash
+spec-reviewer skill install --target codex
+spec-reviewer skill install --target claude
+spec-reviewer skill print --target codex
+```
+
+Skill install backs up existing files before overwriting. User scope writes to
+the agent's home skills directory; project scope writes under the current repo.
+
 ## Data Storage
 
 - Saved reviews live under `~/.spec-reviewer/reviews`.
@@ -127,6 +138,17 @@ pnpm run check
 pnpm run build:binary
 pnpm run binary:smoke
 ```
+
+## Release
+
+```bash
+pnpm run release:artifacts
+pnpm run release:artifacts:all -- --version 0.1.0
+pnpm run homebrew:smoke
+```
+
+Release artifacts and the generated Homebrew formula are written under
+`artifacts/`. See [docs/release.md](docs/release.md).
 
 The code follows a DDD-lite layout:
 

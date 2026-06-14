@@ -2,12 +2,13 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 
 export interface AppConfig {
-  command: "review" | "sessions" | "open";
+  command: "review" | "sessions" | "open" | "skill";
   host: string;
   port: number;
   storageDir: string;
   defaultDocumentPath: string | null;
   sessionId: string | null;
+  skillArgs: string[];
   waitForReview: boolean;
   jsonOutput: boolean;
   openBrowser: boolean;
@@ -36,6 +37,22 @@ export function loadConfig(
   let sessionId: string | null = null;
 
   const first = args[0];
+  if (first === "skill") {
+    args.shift();
+    return {
+      command: "skill",
+      host,
+      port,
+      storageDir: resolve(storageDir),
+      defaultDocumentPath: null,
+      sessionId: null,
+      skillArgs: args,
+      waitForReview: false,
+      jsonOutput: false,
+      openBrowser: false,
+      source: { maxFileLines: 250 },
+    };
+  }
   if (first === "review") {
     args.shift();
   } else if (first === "open") {
@@ -83,6 +100,7 @@ export function loadConfig(
     storageDir: resolve(storageDir),
     defaultDocumentPath: defaultDocumentPath == null ? null : resolve(defaultDocumentPath),
     sessionId,
+    skillArgs: [],
     waitForReview,
     jsonOutput,
     openBrowser,
@@ -121,6 +139,8 @@ function printHelpAndExit(): never {
     "  spec-reviewer [flags] <file.md>",
     "  spec-reviewer sessions [--json]",
     "  spec-reviewer open [flags] <session-id>",
+    "  spec-reviewer skill install --target codex|claude",
+    "  spec-reviewer skill print --target codex|claude",
     "",
     "Flags:",
     "  --host <host>             Loopback host to bind",

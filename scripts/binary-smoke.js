@@ -1,11 +1,11 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { createServer } from "node:net";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
-const binary = join(root, "build", "spec-reviewer");
+const binary = process.env.SPEC_REVIEWER_BINARY ?? join(root, "build", "spec-reviewer");
 
 if (!existsSync(binary)) {
   throw new Error("Missing build/spec-reviewer. Run pnpm run build:binary first.");
@@ -18,6 +18,7 @@ try {
   await smokeServer();
   await smokeWaitWorkflow();
   await smokeSessions();
+  await smokeSkillInstaller();
   console.log("Binary smoke passed");
 } finally {
   rmSync(temp, { recursive: true, force: true });
@@ -101,6 +102,70 @@ async function smokeSessions() {
   if (!Array.isArray(payload.sessions) || payload.sessions.length === 0) {
     throw new Error("sessions command did not report saved reviews");
   }
+}
+
+async function smokeSkillInstaller() {
+  const printed = spawnSync(binary, ["skill", "print", "--target", "codex"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (printed.status !== 0) throw new Error(printed.stderr || "skill print failed");
+  if (!printed.stdout.includes("spec-reviewer review path/to/spec.md --wait --json")) {
+    throw new Error("skill print did not include the wait workflow");
+  }
+  const project = join(temp, "skill-project");
+  const install = spawnSync(binary, [
+    "skill",
+    "install",
+    "--target",
+    "claude",
+    "--project-dir",
+    project,
+  ], { cwd: root, encoding: "utf8" });
+  if (install.status !== 0) throw new Error(install.stderr || "skill install failed");
+  const skill = readFileSync(join(project, ".claude", "skills", "spec-reviewer", "SKILL.md"), "utf8");
+  if (!skill.includes("Spec Reviewer For Claude Code")) throw new Error("project skill was not written");
+  const dryRunDir = join(temp, "skill-dry-run");
+  const dryRun = spawnSync(binary, [
+    "skill",
+    "install",
+    "--target",
+    "codex",
+    "--scope",
+    "project",
+    "--project-dir",
+    dryRunDir,
+    "--dry-run",
+  ], { cwd: root, encoding: "utf8" });
+  if (dryRun.status !== 0 || existsSync(dryRunDir)) throw new Error("skill dry-run wrote files");
+  const invalid = spawnSync(binary, [
+    "skill",
+    "install",
+    "--target",
+    "codex",
+    "--scope",
+    "user",
+    "--project-dir",
+    project,
+  ], { cwd: root, encoding: "utf8" });
+  if (invalid.status === 0) throw new Error("skill accepted --project-dir with user scope");
+  const codexHome = join(temp, "codex-home");
+  const userInstall = spawnSync(binary, ["skill", "install", "--target", "codex"], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, CODEX_HOME: codexHome },
+  });
+  if (userInstall.status !== 0) throw new Error(userInstall.stderr || "user skill install failed");
+  const userSkillPath = join(codexHome, "skills", "spec-reviewer", "SKILL.md");
+  writeFileSync(userSkillPath, "old skill\n", "utf8");
+  const backupInstall = spawnSync(binary, ["skill", "install", "--target", "codex"], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, CODEX_HOME: codexHome },
+  });
+  if (backupInstall.status !== 0) throw new Error(backupInstall.stderr || "skill backup install failed");
+  const backups = readdirSync(dirname(userSkillPath)).filter((name) => name.startsWith("SKILL.md.bak-"));
+  if (backups.length === 0) throw new Error("skill install did not back up existing content");
 }
 
 function writeFixture(name) {

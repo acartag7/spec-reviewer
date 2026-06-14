@@ -187,26 +187,37 @@ Do not introduce a larger generation model for v1. The useful behavior is:
 store the reviewed digest and anchor text, then show drift when the live file
 changes.
 
-## Release Follow-Ups
+## Release Support
 
-The next release work is:
+The release-ready slice includes:
 
-1. Build platform release artifacts.
-2. Add GitHub release packaging.
-3. Add the Homebrew tap/formula that installs the binary artifact.
-4. Test Homebrew install from the release artifact.
-5. Add `spec-reviewer skill install --target codex|claude` after the binary
-   release path is settled.
-6. Optionally reserve/publish npm only as a fallback channel.
-7. Revisit code signing and notarization after real Homebrew testing.
+- platform tarballs built from the Bun-compiled binary
+- generated `SHA256SUMS`
+- generated Homebrew formula for the release tarballs
+- local Homebrew smoke test from a release artifact
+- GitHub Actions release workflow for `v*` tags
+- optional tap update via `HOMEBREW_TAP_TOKEN`
+- `spec-reviewer skill print --target codex|claude`
+- `spec-reviewer skill install --target codex|claude`
 
-Skill installer target, when added:
+Release commands:
 
-- bundle skill templates in the release artifact
-- support `--dry-run`
-- print the destination before writing
-- never overwrite without backup
-- teach agents to run `spec-reviewer review <path> --wait --json`
+```bash
+pnpm run release:artifacts
+pnpm run release:artifacts:all -- --version 0.1.0
+pnpm run homebrew:smoke
+```
+
+The skill installer bundles templates in the binary, supports `--dry-run`,
+prints the destination before writing, backs up existing files before overwrite,
+and teaches agents to run `spec-reviewer review <path> --wait --json`.
+
+Remaining release setup is external:
+
+1. Create or grant access to `acartag7/homebrew-tap`.
+2. Add `HOMEBREW_TAP_TOKEN` if the GitHub release workflow should push the tap.
+3. Optionally reserve/publish npm only as a fallback channel.
+4. Revisit code signing and notarization after real Homebrew testing.
 
 ## Release Checks
 

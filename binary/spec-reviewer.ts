@@ -5,13 +5,16 @@ import { ReviewSessionWaiter, type ReviewCompletion } from "../src/application/r
 import { secureHeaders } from "../src/interfaces/http/security.ts";
 import { readUpload, storeUploadedMarkdown } from "../src/interfaces/http/uploads.ts";
 import { openUrl } from "../src/cli/open-url.ts";
+import { runSkillCommand } from "../src/cli/skill-installer.ts";
 
 const maxJsonBytes = 3 * 1024 * 1024;
 type BunServer = ReturnType<typeof Bun.serve>;
-
 async function main(): Promise<number> {
   try {
     const config = loadConfig();
+    if (config.command === "skill") {
+      return await runSkillCommand(config.skillArgs);
+    }
     const service = createReviewerService(config);
     if (config.command === "sessions") {
       return await printSessions(config, service);
@@ -204,7 +207,6 @@ function writeStartup(config: AppConfig, url: string): void {
     return;
   }
   out.write(`Spec Reviewer running at ${url}\n`);
-  if (config.defaultDocumentPath != null) out.write(`Default document: ${config.defaultDocumentPath}\n`);
 }
 
 async function printSessions(config: AppConfig, service: ReturnType<typeof createReviewerService>): Promise<number> {

@@ -6,10 +6,14 @@ import { createReviewerService } from "./application/app-factory.ts";
 import { ReviewSessionWaiter, type ReviewCompletion } from "./application/review-session.ts";
 import { createHttpServer } from "./interfaces/http/http-server.ts";
 import { openUrl } from "./cli/open-url.ts";
+import { runSkillCommand } from "./cli/skill-installer.ts";
 
 export async function runCli(argv = process.argv.slice(2), env = process.env): Promise<number> {
   try {
     const config = loadConfig(argv, env);
+    if (config.command === "skill") {
+      return await runSkillCommand(config.skillArgs, env);
+    }
     const service = createReviewerService(config);
     if (config.command === "sessions") {
       return await printSessions(config, service);
