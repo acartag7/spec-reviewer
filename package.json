@@ -1,0 +1,22 @@
+{
+  "name": "spec-reviewer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.16.0",
+  "engines": {
+    "node": ">=24",
+    "pnpm": ">=10.16.0"
+  },
+  "bin": {
+    "spec-reviewer": "bin/spec-reviewer.js"
+  },
+  "scripts": {
+    "check": "pnpm run check:syntax && pnpm run check:lines && pnpm run test",
+    "check:lines": "node --no-warnings src/dev/check-line-limits.ts",
+    "check:syntax": "find src test public/js \\( -name '*.ts' -o -name '*.js' \\) -print0 | xargs -0 -n1 node --check",
+    "dev": "node --no-warnings src/server.ts",
+    "start": "node --no-warnings src/server.ts",
+    "test": "node --no-warnings --test test/*.test.ts"
+  }
+}

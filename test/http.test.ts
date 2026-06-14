@@ -1,0 +1,117 @@
+import assert from "node:assert/strict";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { request as httpRequest } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "node:test";
+import { ReviewerService } from "../src/application/reviewer-service.ts";
+import { FileDocumentReader } from "../src/infrastructure/file-document-reader.ts";
+import { JsonReviewStore } from "../src/infrastructure/json-review-store.ts";
+import { createHttpServer } from "../src/interfaces/http/http-server.ts";
+import type { AppConfig } from "../src/config.ts";
+
+test("HTTP API opens, saves, and exports a review", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "spec-reviewer-"));
+  const docPath = join(dir, "README.md");
+  await writeFile(docPath, "# Demo\n\nNeeds review\n", "utf8");
+
+  const config: AppConfig = {
+    host: "127.0.0.1",
+    port: 0,
+    storageDir: join(dir, "store"),
+    defaultDocumentPath: docPath,
+    source: { maxFileLines: 250 },
+  };
+  const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir));
+  const server = createHttpServer(config, service, join(process.cwd(), "public"));
+  t.after(() => server.close());
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.notEqual(address, null);
+  assert.notEqual(typeof address, "string");
+  const base = `http://127.0.0.1:${address.port}`;
+
+  const opened = await json(`${base}/api/document?path=${encodeURIComponent(docPath)}`);
+  assert.equal(opened.document.title, "Demo");
+
+  await json(`${base}/api/review`, {
+    method: "POST",
+    body: JSON.stringify({
+      path: docPath,
+      summary: "Summary",
+      annotations: [{ lineStart: 3, lineEnd: 3, kind: "issue", severity: "major", note: "Fix this" }],
+    }),
+    headers: { "content-type": "application/json" },
+  });
+  const exported = await json(`${base}/api/export?path=${encodeURIComponent(docPath)}`);
+  assert.match(exported.markdown, /Fix this/);
+
+  await writeFile(docPath, "# Demo\n\nChanged\n", "utf8");
+  const changed = await json(`${base}/api/document?path=${encodeURIComponent(docPath)}`);
+  assert.equal(changed.sourceState, "changed");
+  assert.equal(changed.stale, true);
+
+  await json(`${base}/api/review`, {
+    method: "POST",
+    body: JSON.stringify({
+      path: docPath,
+      summary: "Summary",
+      annotations: [{ lineStart: 3, lineEnd: 3, kind: "issue", severity: "major", note: "Still stale" }],
+    }),
+    headers: { "content-type": "application/json" },
+  });
+  const afterSave = await json(`${base}/api/document?path=${encodeURIComponent(docPath)}`);
+  assert.equal(afterSave.sourceState, "changed");
+
+  const recent = await json(`${base}/api/reviews`);
+  assert.equal(recent[0].sourceState, "changed");
+});
+
+test("HTTP server rejects non-loopback Host and Origin headers", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "spec-reviewer-"));
+  const config: AppConfig = {
+    host: "127.0.0.1",
+    port: 0,
+    storageDir: join(dir, "store"),
+    defaultDocumentPath: null,
+    source: { maxFileLines: 250 },
+  };
+  const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir));
+  const server = createHttpServer(config, service, join(process.cwd(), "public"));
+  t.after(() => server.close());
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.notEqual(address, null);
+  assert.notEqual(typeof address, "string");
+
+  const rejectedHost = await rawStatus(address.port, "/api/health", { Host: "evil.com" });
+  assert.equal(rejectedHost.status, 403);
+
+  const rejectedOrigin = await rawStatus(address.port, "/api/health", {
+    Origin: "http://evil.com",
+    Host: `127.0.0.1:${address.port}`,
+  });
+  assert.equal(rejectedOrigin.status, 403);
+
+  const accepted = await rawStatus(address.port, "/api/health", { Host: `127.0.0.1:${address.port}` });
+  assert.equal(accepted.status, 200);
+  assert.match(accepted.headers["content-security-policy"] ?? "", /default-src 'self'/);
+});
+
+async function json(url: string, init?: RequestInit): Promise<any> {
+  const response = await fetch(url, init);
+  const data = await response.json();
+  if (!response.ok) throw new Error(JSON.stringify(data));
+  return data;
+}
+
+async function rawStatus(port: number, path: string, headers: Record<string, string>) {
+  return new Promise<{ status: number; headers: Record<string, string | string[] | undefined> }>((resolve, reject) => {
+    const req = httpRequest({ host: "127.0.0.1", port, path, headers }, (res) => {
+      res.resume();
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: res.headers }));
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
