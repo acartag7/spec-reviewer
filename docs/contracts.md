@@ -73,6 +73,12 @@ Request:
 
 `severity` values: `blocker`, `major`, `minor`, `note`.
 
+`anchorState` values: `ok`, `moved`, `not-found`.
+
+The server stores the original `anchorText` for each note. Open/export responses
+resolve that text against the current document and expose transient `anchor` and
+`anchorState` response fields.
+
 ## Export
 
 ```text
@@ -91,6 +97,10 @@ The export is meant to be pasted directly into an agent task. It includes the
 document path, digest, overall summary, and open annotations grouped by severity.
 If the current file digest differs from the saved review digest, export includes
 a warning and the current digest.
+
+If an annotation anchor moved, export marks the saved range and current range. If
+the saved source text is not found, export marks the annotation as not found. In
+both drift cases, export omits the old selected-text quote.
 
 ## Local Server Security
 

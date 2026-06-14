@@ -1,23 +1,29 @@
 # Spec Reviewer
 
-Standalone local UI for reviewing Markdown specs and exporting agent-ready
-feedback.
+Local-first Markdown spec reviewer for source-anchored feedback.
 
-## Scope
+![Spec Reviewer screenshot](docs/assets/screenshot.jpg)
+
+Spec Reviewer runs on your machine, opens local Markdown files, lets you annotate
+rendered or source text by line, tracks whether saved anchors drift after the
+file changes, and exports clean Markdown feedback for an agent or teammate.
+
+## Features
 
 - Open any local `.md` or `.markdown` file.
 - Drop a Markdown file into the start screen, or paste a local file path.
-- Add line or selection anchored annotations.
-- Save review state under `~/.spec-reviewer/reviews`.
-- Store dropped Markdown files under `~/.spec-reviewer/documents`.
+- Read rendered Markdown by default with a source toggle for line inspection.
+- Add line, block, or text-selection anchored annotations.
+- See inline note markers and per-note anchor drift state.
+- Preview fenced HTML/SVG artifacts only after an explicit sandboxed render.
 - Reopen previous reviews from the recent reviews list.
-- Track whether saved notes match the current file digest.
-- Export Markdown instructions that can be pasted back to an agent.
-- Run as a local-only Node server with a React/Vite frontend.
+- Export Markdown instructions grouped by severity.
+- Run as a loopback-only Node server with a React/Vite frontend.
 
-The next phase is a rendered Markdown reviewer with source-line anchoring,
-sandboxed artifact previews, and stronger per-annotation drift tracking. See
-`docs/builder-direction.md`.
+## Requirements
+
+- Node.js 24 or newer.
+- pnpm 10.32.0 or newer.
 
 ## Supply Chain Policy
 
@@ -26,11 +32,18 @@ sandboxed artifact previews, and stronger per-annotation drift tracking. See
 - `pnpm-workspace.yaml` sets `minimumReleaseAge: 21600` for future installs,
   which means dependency versions must be at least 15 days old.
 - Do not add postinstall-dependent packages without a specific reason.
+- See [docs/dependencies.md](docs/dependencies.md).
 
-## Run
+## Install
 
 ```bash
 pnpm install
+pnpm run build
+```
+
+## Run In Development
+
+```bash
 pnpm run dev
 ```
 
@@ -40,12 +53,28 @@ Open the dev app:
 http://127.0.0.1:5173
 ```
 
-The root screen lets you drag/drop a Markdown file, choose one with the file
-picker, paste a path, or reopen a recent saved review. Browsers do not expose the
-original absolute path for drag/drop files, so dropped files are copied into the
-storage directory and reviewed from there.
+## Run The Built App
 
-## File State
+```bash
+pnpm start -- path/to/spec.md
+pnpm start -- --port 3220 path/to/spec.md
+pnpm start -- --storage-dir ~/.spec-reviewer path/to/spec.md
+```
+
+The production server serves the built app and API from `127.0.0.1:3217` by
+default.
+
+## Data Storage
+
+- Saved reviews live under `~/.spec-reviewer/reviews`.
+- Dropped files are copied under `~/.spec-reviewer/documents`.
+- Reviewed source files are not modified.
+- No telemetry is sent.
+
+Browsers do not expose the original absolute path for drag/drop files, so dropped
+files are copied into the storage directory and reviewed from there.
+
+## Anchor State
 
 Every saved review stores the document digest it was created against. When a file
 is reopened, the UI shows whether the saved notes are:
@@ -55,21 +84,18 @@ is reopened, the UI shows whether the saved notes are:
 - `missing`: a recent review points at a path that no longer exists;
 - `unreviewed`: no saved notes exist yet.
 
-Personal Codex agents can use the installed `$spec-reviewer` skill to open this
-tool for a file and export saved feedback after review.
+Each annotation also stores a source-text snapshot. If the file changes, Spec
+Reviewer marks notes as `ok`, `moved`, or `not-found` and warns in the export
+instead of silently relocating edits.
 
-Useful flags:
+## Security Model
 
-```bash
-pnpm run build
-pnpm start -- --port 3220 path/to/spec.md
-pnpm start -- --storage-dir ~/.spec-reviewer path/to/spec.md
-```
+The API can read local Markdown files by path, so the server binds only to
+loopback hosts. It rejects non-loopback Host/Origin headers and sends a CSP.
+Rendered Markdown is sanitized before insertion. Artifact previews render in
+click-to-render sandboxed iframes with `sandbox=""`.
 
-The production server serves the built app and API from `127.0.0.1:3217` by
-default. The server only binds to loopback hosts because the API can read local
-Markdown files by path. It also rejects non-loopback Host/Origin headers and
-sends a CSP.
+See [docs/security-model.md](docs/security-model.md).
 
 ## Verify
 
@@ -85,3 +111,11 @@ The code follows a DDD-lite layout:
 - `src/interfaces`: local HTTP and static UI.
 
 Files stay at or below 250 lines so review and agent edits stay manageable.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
