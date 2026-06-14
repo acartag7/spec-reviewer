@@ -1,8 +1,8 @@
-import { useRef } from "react"
-import type { Review, ReviewDocument, SelectionRange } from "@/api/types"
+import { useState } from "react"
+import type { Review, ReviewDocument, ReviewSourceState, SelectionRange } from "@/api/types"
+import { RenderedMarkdown } from "@/components/RenderedMarkdown"
 import { SourceStateBanner } from "@/components/SourceState"
-import { overlappingOpenAnnotations } from "@/lib/review-utils"
-import type { ReviewSourceState } from "@/api/types"
+import { SourceReader } from "@/components/SourceReader"
 import { cn } from "@/lib/utils"
 
 interface ReaderPaneProps {
@@ -13,8 +13,10 @@ interface ReaderPaneProps {
   onSelect: (selection: SelectionRange) => void
 }
 
+type ReaderView = "rendered" | "source"
+
 export function ReaderPane({ document, review, selection, sourceState, onSelect }: ReaderPaneProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [view, setView] = useState<ReaderView>("rendered")
   const openCount = review.annotations.filter((item) => item.status === "open").length
 
   return (
@@ -31,94 +33,48 @@ export function ReaderPane({ document, review, selection, sourceState, onSelect 
       <div className="mb-3">
         <SourceStateBanner state={sourceState} />
       </div>
-      <div
-        ref={containerRef}
-        className="overflow-hidden rounded-lg border bg-card"
-        onMouseUp={() => {
-          const next = selectionFromWindow(containerRef.current, document.lines)
-          if (next != null) onSelect(next)
-        }}
-      >
-        {document.lines.map((line) => {
-          const selected = selection.lineStart <= line.number && selection.lineEnd >= line.number
-          const hasNote = overlappingOpenAnnotations(review.annotations, line.number).length > 0
-          return (
-            <div
-              key={line.number}
-              data-line={line.number}
-              tabIndex={0}
-              className={cn(
-                "source-line min-h-7 border-b last:border-b-0 hover:bg-muted",
-                `kind-${line.kind}`,
-                selected && "bg-accent",
-                hasNote && "shadow-[inset_3px_0_0_var(--sev-major)]",
-              )}
-              onClick={() => onSelect({ lineStart: line.number, lineEnd: line.number, selectedText: line.text })}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  onSelect({ lineStart: line.number, lineEnd: line.number, selectedText: line.text })
-                }
-              }}
-            >
-              <div
-                className="source-line-no bg-muted px-2 py-1.5 text-right font-mono text-xs text-muted-foreground/60"
-                data-line-number={line.number}
-              />
-              <div className="source-line-text px-3 py-1.5 font-mono text-[13px] leading-6">{line.text}</div>
-            </div>
-          )
-        })}
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div role="tablist" aria-label="Reader view" className="inline-flex rounded-lg bg-muted p-[3px]">
+          <ViewButton value="rendered" current={view} onClick={setView}>Rendered</ViewButton>
+          <ViewButton value="source" current={view} onClick={setView}>Source</ViewButton>
+        </div>
+        <div className="font-mono text-xs text-muted-foreground">
+          L{selection.lineStart}{selection.lineEnd !== selection.lineStart ? `-L${selection.lineEnd}` : ""}
+        </div>
       </div>
+      {view === "rendered" ? (
+        <RenderedMarkdown document={document} review={review} selection={selection} onSelect={onSelect} />
+      ) : (
+        <SourceReader document={document} review={review} selection={selection} onSelect={onSelect} />
+      )}
     </section>
   )
 }
 
-function selectionFromWindow(
-  container: HTMLDivElement | null,
-  lines: ReviewDocument["lines"],
-): SelectionRange | null {
-  if (container == null) return null
-  const domSelection = window.getSelection()
-  if (domSelection == null || domSelection.isCollapsed) return null
-  const range = domSelection.getRangeAt(0)
-  if (!container.contains(range.commonAncestorContainer)) return null
-  const start = lineFromNode(range.startContainer)
-  const end = lineFromNode(range.endContainer)
-  if (start == null || end == null) return null
-  const lineStart = Math.min(start, end)
-  const lineEnd = Math.max(start, end)
-  return {
-    lineStart,
-    lineEnd,
-    selectedText: selectedTextFromLines(lines, lineStart, lineEnd, domSelection.toString()),
-  }
-}
-
-function selectedTextFromLines(
-  lines: ReviewDocument["lines"],
-  start: number,
-  end: number,
-  rawSelection: string,
-): string {
-  if (start === end) return cleanSelection(rawSelection)
-  return lines
-    .filter((line) => line.number >= start && line.number <= end)
-    .map((line) => line.text)
-    .join("\n")
-    .trim()
-}
-
-function cleanSelection(value: string): string {
-  return value
-    .split(/\n/)
-    .map((line) => line.replace(/^\s*\d+\s+/, ""))
-    .join("\n")
-    .trim()
-}
-
-function lineFromNode(node: Node): number | null {
-  const element = node instanceof Element ? node : node.parentElement
-  const row = element?.closest("[data-line]")
-  const value = row instanceof HTMLElement ? row.dataset.line : null
-  return value == null ? null : Number(value)
+function ViewButton({
+  value,
+  current,
+  onClick,
+  children,
+}: {
+  value: ReaderView
+  current: ReaderView
+  onClick: (view: ReaderView) => void
+  children: string
+}) {
+  const active = value === current
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      className={cn(
+        "h-7 rounded-md px-2 text-sm font-medium text-muted-foreground",
+        active && "bg-background text-foreground shadow-sm",
+      )}
+      onClick={() => onClick(value)}
+    >
+      {children}
+    </button>
+  )
 }
