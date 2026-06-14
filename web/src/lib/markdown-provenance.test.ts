@@ -40,8 +40,8 @@ test("renderMarkdownBlockHtml adds finer list and code source anchors", () => {
   const code = blocks.find((block) => block.startLine === 15)
   if (list == null || code == null) throw new Error("fixture blocks missing")
 
-  const listHost = htmlHost(renderMarkdownBlockHtml(list))
-  const codeHost = htmlHost(renderMarkdownBlockHtml(code))
+  const listHost = htmlHost(renderMarkdownBlockHtml(list).html)
+  const codeHost = htmlHost(renderMarkdownBlockHtml(code).html)
 
   expect(Array.from(listHost.querySelectorAll<HTMLElement>("li")).map((item) => item.dataset.sourceLine))
     .toEqual(["9", "10", "11"])
@@ -53,10 +53,43 @@ test("renderMarkdownBlockHtml sanitizes raw markdown HTML", () => {
   const [block] = buildMarkdownBlocks('<img src="x" onerror="alert(1)">')
   if (block == null) throw new Error("fixture block missing")
 
-  const host = htmlHost(renderMarkdownBlockHtml(block))
+  const host = htmlHost(renderMarkdownBlockHtml(block).html)
 
   expect(host.innerHTML).not.toContain("onerror")
   expect(host.querySelector("img")?.getAttribute("src")).toBe("x")
+})
+
+test("renderMarkdownBlockHtml identifies fenced SVG artifacts after sanitizing", () => {
+  const [block] = buildMarkdownBlocks('```svg\n<svg><circle cx="4" cy="4" r="4" onload="alert(1)" /></svg>\n```')
+  if (block == null) throw new Error("fixture block missing")
+
+  const rendered = renderMarkdownBlockHtml(block)
+
+  expect(rendered.artifact?.kind).toBe("svg")
+  expect(rendered.artifact?.html).not.toContain("onload")
+  expect(rendered.artifact?.source).toContain("<svg>")
+})
+
+test("renderMarkdownBlockHtml identifies raw SVG artifacts", () => {
+  const [block] = buildMarkdownBlocks('<svg><circle cx="4" cy="4" r="4" onload="alert(1)" /></svg>')
+  if (block == null) throw new Error("fixture block missing")
+
+  const rendered = renderMarkdownBlockHtml(block)
+
+  expect(rendered.artifact?.kind).toBe("svg")
+  expect(rendered.artifact?.html).not.toContain("onload")
+})
+
+test("renderMarkdownBlockHtml identifies hinted HTML artifacts", () => {
+  const [block] = buildMarkdownBlocks('<div data-artifact><button onclick="alert(1)">Run</button><script>alert(1)</script></div>')
+  if (block == null) throw new Error("fixture block missing")
+
+  const rendered = renderMarkdownBlockHtml(block)
+
+  expect(rendered.artifact?.kind).toBe("html")
+  expect(rendered.artifact?.html).toContain("<button>Run</button>")
+  expect(rendered.artifact?.html).not.toContain("onclick")
+  expect(rendered.artifact?.html).not.toContain("<script")
 })
 
 function htmlHost(html: string): HTMLElement {

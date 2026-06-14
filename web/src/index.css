@@ -3,6 +3,7 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/jetbrains-mono";
+@import "./artifact.css";
 
 @custom-variant dark (&:is(.dark *));
 

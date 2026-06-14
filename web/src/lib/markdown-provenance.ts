@@ -6,6 +6,7 @@ interface MarkdownToken {
   raw: string
   items?: Array<{ raw: string }>
   text?: string
+  lang?: string
 }
 
 export interface SourceAnchor {
@@ -20,6 +21,12 @@ export interface MarkdownBlock {
   startLine: number
   endLine: number
   anchors: SourceAnchor[]
+  artifact: MarkdownArtifact | null
+}
+
+export interface MarkdownArtifact {
+  kind: "html" | "svg"
+  source: string
 }
 
 export function sourceFromLines(lines: ReviewDocument["lines"]): string {
@@ -56,6 +63,7 @@ export function buildMarkdownBlocks(source: string): MarkdownBlock[] {
       startLine,
       endLine,
       anchors: anchorsForToken(token, source, startOffset, startLine, lineOf),
+      artifact: artifactForToken(token),
     })
   }
 
@@ -132,4 +140,12 @@ function codeLineAnchors(token: MarkdownToken, startLine: number): SourceAnchor[
     lineStart: contentStart + index,
     lineEnd: contentStart + index,
   }))
+}
+
+function artifactForToken(token: MarkdownToken): MarkdownArtifact | null {
+  if (token.type !== "code" || token.text == null) return null
+  const lang = (token.lang ?? "").trim().toLowerCase()
+  if (lang === "html") return { kind: "html", source: token.text }
+  if (lang === "svg") return { kind: "svg", source: token.text }
+  return null
 }

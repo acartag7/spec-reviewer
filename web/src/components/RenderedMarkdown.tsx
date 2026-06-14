@@ -1,5 +1,6 @@
 import { useMemo, useRef } from "react"
 import type { Review, ReviewDocument, SelectionRange } from "@/api/types"
+import { ArtifactPreview } from "@/components/ArtifactPreview"
 import { buildMarkdownBlocks, sourceFromLines, sourceTextForRange } from "@/lib/markdown-provenance"
 import { renderMarkdownBlockHtml } from "@/lib/markdown-html"
 import { selectionFromElement, selectionFromWindow } from "@/lib/selection-utils"
@@ -19,7 +20,7 @@ export function RenderedMarkdown({ document, review, selection, onSelect }: Rend
     const source = sourceFromLines(document.lines)
     return buildMarkdownBlocks(source).map((block) => ({
       ...block,
-      html: renderMarkdownBlockHtml(block),
+      rendered: renderMarkdownBlockHtml(block),
     }))
   }, [document.digest, document.lines])
 
@@ -65,8 +66,13 @@ export function RenderedMarkdown({ document, review, selection, onSelect }: Rend
                 })
               }
             }}
-            dangerouslySetInnerHTML={{ __html: block.html }}
-          />
+          >
+            {block.rendered.artifact == null ? (
+              <div dangerouslySetInnerHTML={{ __html: block.rendered.html }} />
+            ) : (
+              <ArtifactPreview artifact={block.rendered.artifact} />
+            )}
+          </div>
         )
       })}
     </div>
