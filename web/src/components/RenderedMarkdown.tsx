@@ -1,4 +1,5 @@
 import { useMemo, useRef } from "react"
+import { MessageSquarePlus } from "lucide-react"
 import type { Review, ReviewDocument, SelectionRange } from "@/api/types"
 import { ArtifactPreview } from "@/components/ArtifactPreview"
 import { buildMarkdownBlocks, sourceFromLines, sourceTextForRange } from "@/lib/markdown-provenance"
@@ -48,6 +49,7 @@ export function RenderedMarkdown({ document, review, selection, onSelect }: Rend
           return annotation.status === "open" && annotation.lineStart <= block.endLine && annotation.lineEnd >= block.startLine
         })
         const selected = selection.lineStart <= block.endLine && selection.lineEnd >= block.startLine
+        const selectedText = sourceTextForRange(document.lines, block.startLine, block.endLine)
         return (
           <div
             key={block.id}
@@ -62,11 +64,22 @@ export function RenderedMarkdown({ document, review, selection, onSelect }: Rend
                 onSelect({
                   lineStart: block.startLine,
                   lineEnd: block.endLine,
-                  selectedText: sourceTextForRange(document.lines, block.startLine, block.endLine),
+                  selectedText,
                 })
               }
             }}
           >
+            <button
+              type="button"
+              className="inline-note-button"
+              aria-label={`Add note at line ${block.startLine}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                onSelect({ lineStart: block.startLine, lineEnd: block.endLine, selectedText })
+              }}
+            >
+              <MessageSquarePlus className="size-4" />
+            </button>
             {block.rendered.artifact == null ? (
               <div dangerouslySetInnerHTML={{ __html: block.rendered.html }} />
             ) : (

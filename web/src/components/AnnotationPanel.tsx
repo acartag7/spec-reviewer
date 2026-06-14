@@ -2,10 +2,10 @@ import { RotateCcw, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import type { AnnotationKind, AnnotationSeverity, SelectionRange } from "@/api/types"
 import { emptyForm, kinds, severities, type AnnotationFormValue } from "@/lib/review-utils"
+import { cn } from "@/lib/utils"
 
 interface AnnotationPanelProps {
   form: AnnotationFormValue
@@ -114,15 +114,23 @@ function SegmentedField<T extends AnnotationSeverity | AnnotationKind>({
   return (
     <div className="grid gap-1">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <Tabs value={value} onValueChange={(next) => onChange(next as T)}>
-        <TabsList aria-label={label} className="h-auto flex-wrap justify-start">
-          {options.map((option) => (
-            <TabsTrigger key={option.value} value={option.value} className="min-w-16">
-              {option.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      <div role="radiogroup" aria-label={label} className="inline-flex flex-wrap gap-1 rounded-lg bg-muted p-[3px]">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={option.value === value}
+            className={cn(
+              "h-7 min-w-16 rounded-md px-2 text-sm font-medium text-muted-foreground",
+              option.value === value && "bg-background text-foreground shadow-sm",
+            )}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

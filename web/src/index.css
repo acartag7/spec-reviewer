@@ -4,6 +4,7 @@
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/jetbrains-mono";
 @import "./artifact.css";
+@import "./reader.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -202,6 +203,7 @@
 .source-line {
   display: grid;
   grid-template-columns: 3.5rem minmax(0, 1fr);
+  position: relative;
 }
 
 .source-line-no {

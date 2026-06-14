@@ -25,8 +25,22 @@ test("renders markdown by default and keeps source-line click anchors", () => {
     selectedText: "- Open local file.",
   })
 
+  fireEvent.click(screen.getByRole("button", { name: "Add note at line 3" }))
+  expect(onSelect).toHaveBeenLastCalledWith({
+    lineStart: 3,
+    lineEnd: 3,
+    selectedText: "- Open local file.",
+  })
+
   fireEvent.click(screen.getByRole("tab", { name: "Source" }))
   expect(screen.getByText("# Title")).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole("button", { name: "Add note at line 1" }))
+  expect(onSelect).toHaveBeenLastCalledWith({
+    lineStart: 1,
+    lineEnd: 1,
+    selectedText: "# Title",
+  })
 })
 
 const documentFixture: ReviewDocument = {

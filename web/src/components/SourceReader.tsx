@@ -1,4 +1,5 @@
 import { useRef } from "react"
+import { MessageSquarePlus } from "lucide-react"
 import type { Review, ReviewDocument, SelectionRange } from "@/api/types"
 import { overlappingOpenAnnotations } from "@/lib/review-utils"
 import { selectionFromElement, selectionFromWindow } from "@/lib/selection-utils"
@@ -56,6 +57,17 @@ export function SourceReader({ document, review, selection, onSelect }: SourceRe
               }
             }}
           >
+            <button
+              type="button"
+              className="source-note-button"
+              aria-label={`Add note at line ${line.number}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                onSelect({ lineStart: line.number, lineEnd: line.number, selectedText: line.text })
+              }}
+            >
+              <MessageSquarePlus className="size-4" />
+            </button>
             <div
               className="source-line-no bg-muted px-2 py-1.5 text-right font-mono text-xs text-muted-foreground/60"
               data-line-number={line.number}
