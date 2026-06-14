@@ -51,7 +51,12 @@ export function Workspace(props: WorkspaceProps) {
           onDelete={props.onDeleteAnnotation}
         />
         <div className="border-t" />
-        <AgentExport markdown={props.exportMarkdown} loading={props.exportLoading} onCopy={props.onCopyExport} />
+        <AgentExport
+          markdown={props.exportMarkdown}
+          loading={props.exportLoading}
+          annotations={props.review.annotations}
+          onCopy={props.onCopyExport}
+        />
       </aside>
     </main>
   )

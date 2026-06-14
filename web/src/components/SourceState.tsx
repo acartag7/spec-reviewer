@@ -1,11 +1,16 @@
 import { AlertTriangle, CheckCircle2, CircleDashed, FileQuestion } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import type { ReviewSourceState } from "@/api/types"
+import type { Annotation, ReviewSourceState } from "@/api/types"
 import { sourceStateLabel } from "@/lib/path-utils"
+import { anchorDriftSummary, anchorDriftText } from "@/lib/review-utils"
 import { cn } from "@/lib/utils"
 
 interface SourceStateBadgeProps {
   state: ReviewSourceState
+}
+
+interface SourceStateBannerProps extends SourceStateBadgeProps {
+  annotations?: Annotation[]
 }
 
 const chipClass: Record<ReviewSourceState, string> = {
@@ -25,11 +30,15 @@ export function SourceStateBadge({ state }: SourceStateBadgeProps) {
   )
 }
 
-export function SourceStateBanner({ state }: SourceStateBadgeProps) {
-  const message = sourceStateMessage(state)
+export function SourceStateBanner({ state, annotations = [] }: SourceStateBannerProps) {
+  const drift = anchorDriftSummary(annotations)
+  const message = drift.total > 0 ? anchorDriftMessage(drift) : sourceStateMessage(state)
   if (message == null) return null
   return (
-    <div className={cn("rounded-lg border px-3 py-2 text-sm", bannerClass(state))}>
+    <div
+      role={drift.total > 0 ? "alert" : "status"}
+      className={cn("rounded-lg border px-3 py-2 text-sm", bannerClass(state, drift.total > 0, drift.notFound > 0))}
+    >
       {message}
     </div>
   )
@@ -51,8 +60,12 @@ function sourceStateMessage(state: ReviewSourceState): string | null {
   return null
 }
 
-function bannerClass(state: ReviewSourceState): string {
-  if (state === "changed") return "border-sev-major/30 bg-sev-major/10 text-foreground"
-  if (state === "missing") return "border-sev-blocker/30 bg-sev-blocker/10 text-foreground"
+function anchorDriftMessage(summary: ReturnType<typeof anchorDriftSummary>): string {
+  return `Anchor drift detected: ${anchorDriftText(summary)}. Recheck before sending feedback.`
+}
+
+function bannerClass(state: ReviewSourceState, hasDrift = false, hasMissingAnchor = false): string {
+  if (hasMissingAnchor || state === "missing") return "border-sev-blocker/30 bg-sev-blocker/10 text-foreground"
+  if (hasDrift || state === "changed") return "border-sev-major/30 bg-sev-major/10 text-foreground"
   return "border-border bg-muted text-foreground"
 }

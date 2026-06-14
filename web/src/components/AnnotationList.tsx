@@ -1,8 +1,14 @@
-import { Pencil, Trash2 } from "lucide-react"
+import { MapPinCheck, MapPinSearch, MapPinX, Pencil, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Annotation } from "@/api/types"
-import { rangeLabel, sortAnnotations } from "@/lib/review-utils"
+import {
+  annotationAnchorRange,
+  annotationAnchorState,
+  anchorStateLabel,
+  rangeLabel,
+  sortAnnotations,
+} from "@/lib/review-utils"
 import { cn } from "@/lib/utils"
 
 interface AnnotationListProps {
@@ -31,6 +37,7 @@ export function AnnotationList({ annotations, onOpen, onEdit, onDelete }: Annota
                 <SeverityBadge severity={annotation.severity} />
                 <Badge variant="outline">{annotation.kind}</Badge>
                 <Badge variant="outline">{rangeLabel(annotation)}</Badge>
+                <AnchorStateBadge annotation={annotation} />
               </div>
               <div className="text-sm leading-5">{annotation.note}</div>
               <div className="flex justify-end gap-1">
@@ -66,6 +73,27 @@ export function AnnotationList({ annotations, onOpen, onEdit, onDelete }: Annota
       )}
     </section>
   )
+}
+
+function AnchorStateBadge({ annotation }: { annotation: Annotation }) {
+  const state = annotationAnchorState(annotation)
+  if (state == null) return null
+  const Icon = state === "ok" ? MapPinCheck : state === "moved" ? MapPinSearch : MapPinX
+  const range = state === "moved" ? annotationAnchorRange(annotation) : null
+  const label = range != null ? `moved to ${range}` : anchorStateLabel(state)
+
+  return (
+    <Badge variant="outline" className={cn("capitalize", anchorStateClass(state))}>
+      <Icon />
+      {label}
+    </Badge>
+  )
+}
+
+function anchorStateClass(state: NonNullable<ReturnType<typeof annotationAnchorState>>): string {
+  if (state === "ok") return "border-ok/30 bg-ok/10 text-ok"
+  if (state === "moved") return "border-sev-major/35 bg-sev-major/10 text-sev-major"
+  return "border-sev-blocker/35 bg-sev-blocker/10 text-sev-blocker"
 }
 
 function SeverityBadge({ severity }: { severity: Annotation["severity"] }) {

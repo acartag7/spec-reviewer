@@ -31,7 +31,7 @@ export function ReaderPane({ document, review, selection, sourceState, onSelect 
         </div>
       </div>
       <div className="mb-3">
-        <SourceStateBanner state={sourceState} />
+        <SourceStateBanner state={sourceState} annotations={review.annotations} />
       </div>
       <div className="mb-4 flex items-center justify-between gap-3">
         <div role="tablist" aria-label="Reader view" className="inline-flex rounded-lg bg-muted p-[3px]">

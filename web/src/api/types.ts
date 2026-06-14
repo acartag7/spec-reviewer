@@ -3,6 +3,7 @@ export type ReviewSourceState = "unreviewed" | "current" | "changed" | "missing"
 export type AnnotationKind = "issue" | "question" | "suggestion" | "decision" | "note"
 export type AnnotationSeverity = "blocker" | "major" | "minor" | "note"
 export type AnnotationStatus = "open" | "resolved"
+export type AnnotationAnchorState = "ok" | "moved" | "not-found"
 
 export interface DocumentLine {
   number: number
@@ -19,6 +20,13 @@ export interface ReviewDocument {
   sections: Array<{ line: number; level: number; title: string }>
 }
 
+export interface AnnotationAnchor {
+  state: AnnotationAnchorState
+  lineStart?: number | null
+  lineEnd?: number | null
+  sourceText?: string | null
+}
+
 export interface Annotation {
   id: string
   lineStart: number
@@ -32,6 +40,8 @@ export interface Annotation {
   agentAction: string
   createdAt: string
   updatedAt: string
+  anchorState?: AnnotationAnchorState
+  anchor?: AnnotationAnchor | null
 }
 
 export interface Review {

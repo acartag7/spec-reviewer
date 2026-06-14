@@ -34,7 +34,7 @@ test("HTTP API opens, saves, and exports a review", async (t) => {
   const opened = await json(`${base}/api/document?path=${encodeURIComponent(docPath)}`);
   assert.equal(opened.document.title, "Demo");
 
-  await json(`${base}/api/review`, {
+  const saved = await json(`${base}/api/review`, {
     method: "POST",
     body: JSON.stringify({
       path: docPath,
@@ -50,21 +50,92 @@ test("HTTP API opens, saves, and exports a review", async (t) => {
   const changed = await json(`${base}/api/document?path=${encodeURIComponent(docPath)}`);
   assert.equal(changed.sourceState, "changed");
   assert.equal(changed.stale, true);
+  assert.equal(changed.review.annotations[0].anchorState, "not-found");
 
   await json(`${base}/api/review`, {
     method: "POST",
     body: JSON.stringify({
       path: docPath,
       summary: "Summary",
-      annotations: [{ lineStart: 3, lineEnd: 3, kind: "issue", severity: "major", note: "Still stale" }],
+      annotations: [{
+        id: saved.annotations[0].id,
+        lineStart: 3,
+        lineEnd: 3,
+        kind: "issue",
+        severity: "major",
+        note: "Still stale",
+      }],
     }),
     headers: { "content-type": "application/json" },
   });
   const afterSave = await json(`${base}/api/document?path=${encodeURIComponent(docPath)}`);
   assert.equal(afterSave.sourceState, "changed");
+  assert.equal(afterSave.review.annotations[0].anchorState, "not-found");
 
   const recent = await json(`${base}/api/reviews`);
   assert.equal(recent[0].sourceState, "changed");
+});
+
+test("HTTP API resolves moved annotation anchors without changing saved lines", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "spec-reviewer-"));
+  const docPath = join(dir, "README.md");
+  await writeFile(docPath, "# Demo\n\nTarget text\nOther\n", "utf8");
+  const config: AppConfig = {
+    host: "127.0.0.1",
+    port: 0,
+    storageDir: join(dir, "store"),
+    defaultDocumentPath: docPath,
+    source: { maxFileLines: 250 },
+  };
+  const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir));
+  const server = createHttpServer(config, service, join(process.cwd(), "public"));
+  t.after(() => server.close());
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.notEqual(address, null);
+  assert.notEqual(typeof address, "string");
+  const base = `http://127.0.0.1:${address.port}`;
+
+  const saved = await json(`${base}/api/review`, {
+    method: "POST",
+    body: JSON.stringify({
+      path: docPath,
+      annotations: [{ lineStart: 3, lineEnd: 3, kind: "issue", severity: "major", note: "Track this" }],
+    }),
+    headers: { "content-type": "application/json" },
+  });
+  assert.equal(saved.annotations[0].anchorState, "ok");
+
+  await writeFile(docPath, "# Demo\n\nOther\nCurrent replacement\nTarget text\n", "utf8");
+  const moved = await json(`${base}/api/document?path=${encodeURIComponent(docPath)}`);
+  assert.equal(moved.review.annotations[0].lineStart, 3);
+  assert.equal(moved.review.annotations[0].anchorState, "moved");
+  assert.equal(moved.review.annotations[0].anchor.lineStart, 5);
+
+  const driftedExport = await json(`${base}/api/export?path=${encodeURIComponent(docPath)}`);
+  assert.match(driftedExport.markdown, /saved line 3 \(current line 5\)/);
+  assert.match(driftedExport.markdown, /Anchor drift: saved text now appears at line 5/);
+
+  const reanchored = await json(`${base}/api/review`, {
+    method: "POST",
+    body: JSON.stringify({
+      path: docPath,
+      annotations: [{
+        id: saved.annotations[0].id,
+        lineStart: 4,
+        lineEnd: 4,
+        kind: "issue",
+        severity: "major",
+        note: "Reanchor to this current line",
+      }],
+    }),
+    headers: { "content-type": "application/json" },
+  });
+  assert.equal(reanchored.annotations[0].lineStart, 4);
+  assert.equal(reanchored.annotations[0].anchorState, "ok");
+
+  const refreshedExport = await json(`${base}/api/export?path=${encodeURIComponent(docPath)}`);
+  assert.doesNotMatch(refreshedExport.markdown, /Anchor drift: saved text now appears at line 5/);
 });
 
 test("HTTP server rejects non-loopback Host and Origin headers", async (t) => {

@@ -1,5 +1,13 @@
 import { sectionForLine } from "../domain/document.ts";
-import { createEmptyReview, normalizeReviewDraft, type Review, type ReviewDraft } from "../domain/review.ts";
+import {
+  createEmptyReview,
+  normalizeReviewDraft,
+  sourceTextForLines,
+  withResolvedAnchors,
+  type Annotation,
+  type Review,
+  type ReviewDraft,
+} from "../domain/review.ts";
 import { exportReviewMarkdown } from "./export-review.ts";
 import type { DocumentReader, RecentReview, ReviewSourceState, ReviewStore } from "./ports.ts";
 
@@ -25,18 +33,19 @@ export class ReviewerService {
     if (stored == null) {
       return {
         document,
-        review: createEmptyReview(document.path, document.digest),
+        review: withResolvedAnchors(document, createEmptyReview(document.path, document.digest)),
         stale: false,
         sourceState: "unreviewed",
       };
     }
     const stale = stored.documentDigest !== document.digest;
-    return { document, review: stored, stale, sourceState: stale ? "changed" : "current" };
+    return { document, review: withResolvedAnchors(document, stored), stale, sourceState: stale ? "changed" : "current" };
   }
 
   async saveReview(draft: ReviewDraft): Promise<Review> {
     const { document } = await this.reader.readMarkdown(draft.path);
     const previous = await this.store.load(document.path);
+    const previousAnchors = new Map(previous?.annotations.map((item) => [item.id, item]) ?? []);
     const digest = previous != null && previous.documentDigest !== document.digest
       ? previous.documentDigest
       : document.digest;
@@ -44,16 +53,23 @@ export class ReviewerService {
       { ...draft, path: document.path },
       digest,
       (line) => sectionForLine(document, line),
+      (annotation) => {
+        const previousAnchor = previousAnchors.get(annotation.id);
+        if (sameSavedRange(previousAnchor, annotation) && previousAnchor.anchorText != null) {
+          return previousAnchor.anchorText;
+        }
+        return sourceTextForLines(document, annotation.lineStart, annotation.lineEnd);
+      },
     );
     if (previous != null) review.createdAt = previous.createdAt;
     await this.store.save(review);
-    return review;
+    return withResolvedAnchors(document, review);
   }
 
   async exportReview(path: string): Promise<{ markdown: string }> {
     const { document } = await this.reader.readMarkdown(path);
     const review = await this.store.load(document.path) ?? createEmptyReview(document.path, document.digest);
-    return { markdown: exportReviewMarkdown(document, review) };
+    return { markdown: exportReviewMarkdown(document, withResolvedAnchors(document, review)) };
   }
 
   async listRecentReviews(limit = 20): Promise<RecentReview[]> {
@@ -71,4 +87,11 @@ export class ReviewerService {
       }
     }));
   }
+}
+
+function sameSavedRange(
+  previous: Annotation | undefined,
+  next: Pick<Annotation, "lineStart" | "lineEnd">,
+): boolean {
+  return previous != null && previous.lineStart === next.lineStart && previous.lineEnd === next.lineEnd;
 }

@@ -1,4 +1,11 @@
-import type { Annotation, AnnotationKind, AnnotationSeverity, Review, SelectionRange } from "@/api/types"
+import type {
+  Annotation,
+  AnnotationAnchorState,
+  AnnotationKind,
+  AnnotationSeverity,
+  Review,
+  SelectionRange,
+} from "@/api/types"
 
 export const severities: Array<{ value: AnnotationSeverity; label: string }> = [
   { value: "major", label: "Major" },
@@ -24,6 +31,12 @@ export interface AnnotationFormValue {
   severity: AnnotationSeverity
   kind: AnnotationKind
   note: string
+}
+
+export interface AnchorDriftSummary {
+  moved: number
+  notFound: number
+  total: number
 }
 
 export function emptyForm(selection: SelectionRange): AnnotationFormValue {
@@ -100,4 +113,41 @@ export function rangeLabel(annotation: Pick<Annotation, "lineStart" | "lineEnd">
   return annotation.lineStart === annotation.lineEnd
     ? `L${annotation.lineStart}`
     : `L${annotation.lineStart}-${annotation.lineEnd}`
+}
+
+export function annotationAnchorState(annotation: Annotation): AnnotationAnchorState | null {
+  return annotation.anchor?.state ?? annotation.anchorState ?? null
+}
+
+export function annotationAnchorRange(annotation: Annotation): string | null {
+  const start = annotation.anchor?.lineStart
+  if (start == null) return null
+  const end = annotation.anchor?.lineEnd ?? start
+  return rangeLabel({ lineStart: start, lineEnd: end })
+}
+
+export function anchorStateLabel(state: AnnotationAnchorState): string {
+  if (state === "not-found") return "anchor not found"
+  return `anchor ${state}`
+}
+
+export function anchorDriftSummary(annotations: Annotation[]): AnchorDriftSummary {
+  return annotations.reduce<AnchorDriftSummary>(
+    (summary, annotation) => {
+      const state = annotationAnchorState(annotation)
+      if (state === "moved") summary.moved += 1
+      if (state === "not-found") summary.notFound += 1
+      summary.total = summary.moved + summary.notFound
+      return summary
+    },
+    { moved: 0, notFound: 0, total: 0 },
+  )
+}
+
+export function anchorDriftText(summary: AnchorDriftSummary): string {
+  const parts = [
+    summary.moved > 0 ? `${summary.moved} moved` : "",
+    summary.notFound > 0 ? `${summary.notFound} not found` : "",
+  ].filter(Boolean)
+  return parts.join(", ")
 }
