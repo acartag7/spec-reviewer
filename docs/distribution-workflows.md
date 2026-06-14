@@ -1,28 +1,26 @@
 # Distribution And Agent Workflows
 
-This spec defines the v1 distribution and workflow shape for Spec Reviewer:
-Homebrew-first install, a bundled binary runtime, minimal local state, and one
-clean handoff path between agents and humans.
+This document reflects the accepted v1 direction after review: ship Spec
+Reviewer as a Homebrew-first, bundled-binary local tool, keep the agent handoff
+minimal, and avoid relying on a user's Node/npm setup.
 
-## Direction
-- Homebrew is the public install path.
-- v1 should lead with a bundled Bun-compiled binary/runtime.
-- Public UX should not rely on the user's Node, npm, or npx setup.
-- npm can exist as a reserved/published package channel, not the primary story.
-- Agent workflows should block until the human finishes or cancels review.
-- Local state should stay simple, local, and inspectable under
-  `~/.spec-reviewer`.
+## Accepted Direction
 
-## Non-Goals
-- No hosted service, login, accounts, remote sync, or automatic spec edits.
-- No standalone `export` or `verify` command requirement for v1.
-- No notarization requirement for v1.
+- Public install should be Homebrew.
+- The Homebrew formula should install a released bundled binary.
+- The binary should be built with Bun so users do not need Node, pnpm, npm, or
+  Bun installed at runtime.
+- `--wait --json` is useful because it lets an agent block until the human
+  clicks Finish Review or Cancel.
+- v1 should stay small. No standalone `export` or `verify` command is needed.
+- Rechecking feedback after an agent edit should happen by reopening the same
+  saved review/session and showing source drift.
+- Notarization is deferred. Keep the binary layout compatible with future code
+  signing and notarization.
 
-The binary should still be shaped so code signing and notarization can be added
-later without changing the install model.
+## Public Install Shape
 
-## Public Install
-The public install path should be:
+Target public install:
 
 ```bash
 brew tap acartag7/tap
@@ -30,193 +28,223 @@ brew install spec-reviewer
 spec-reviewer review path/to/spec.md
 ```
 
-The Homebrew formula should install a released binary artifact. It should not
-ask users to install Node or depend on their local package manager state.
+The formula should install the release artifact directly. It should not ask
+users to install Node or depend on their local package manager state.
 
-The released artifact should include:
+Release artifact target:
 
-- Bun-compiled `spec-reviewer` binary
-- compiled server/runtime code
-- built frontend assets
-- bundled skill templates
+- one `spec-reviewer` executable per platform
 - license, README, and release metadata
+- no local stores, `.env` files, design scratch, build caches, or dev-only
+  directories
 
-The binary layout should be code-signing/notarization-ready later: stable binary
-name, deterministic release archive, no normal runtime writes outside
-`~/.spec-reviewer`, and no install-time scripts for normal use.
+The npm package name should be checked and reserved before publishing anything
+there. npm is not the public UX. If npm is used, it should be a secondary
+package/reservation channel or developer fallback, not the install story.
 
-## npm Positioning
-The npm package name `spec-reviewer` appears available or reservable and should
-be reserved if practical.
+## Current Implemented Slice
 
-npm should not be documented as the primary install path. Do not recommend
-global npm installation or npx as public UX.
+The current branch implements the first distribution slice:
 
-Developer or agent fallback docs may mention `pnpm dlx spec-reviewer review
-path/to/spec.md --wait --json` or `bunx spec-reviewer review path/to/spec.md
---wait --json`. Those are fallbacks only. The public story remains Homebrew
-plus the bundled binary.
+```bash
+pnpm run build:binary
+./build/spec-reviewer review path/to/spec.md
+./build/spec-reviewer review path/to/spec.md --wait --json
+./build/spec-reviewer sessions
+./build/spec-reviewer open <session-id>
+```
 
-## CLI Surface
-Primary commands:
+Implemented behavior:
+
+- `build:binary` builds the server, frontend, and Bun-compiled executable.
+- The binary embeds the built frontend and serves the same local API.
+- `review <path>` and the compatibility form `<path>` both open a review.
+- `--wait --json` keeps the CLI running until the browser sends Finish or
+  Cancel.
+- Finish exits zero and prints JSON to stdout.
+- Cancel exits non-zero.
+- `sessions` lists saved reviews.
+- `open <session-id>` reopens an existing saved review using the current
+  path-keyed review ID.
+- The browser shows Finish Review and Cancel only for wait sessions.
+- `binary:smoke` tests help output, server startup, embedded assets, document
+  loading, `--wait --json`, Finish Review, and `sessions --json`.
+
+Current wait JSON shape:
+
+```json
+{
+  "status": "finished",
+  "path": "/absolute/path/to/spec.md",
+  "markdown": "# Agent Review Feedback\n..."
+}
+```
+
+That is enough for the v1 agent loop. Richer fields such as source digest,
+session ID, and structured annotations can be added later without changing the
+core handoff.
+
+## Minimal CLI Surface
+
+Keep the command surface small:
 
 ```bash
 spec-reviewer review <path>
+spec-reviewer <path>
 spec-reviewer review <path> --wait --json
 spec-reviewer sessions
 spec-reviewer open <session-id>
-spec-reviewer skill install --target codex|claude
-spec-reviewer skill print --target codex|claude
 ```
-
-Compatibility command:
-
-```bash
-spec-reviewer <path>
-```
-
-This should behave like `spec-reviewer review <path>`.
 
 Useful flags:
 
-- `--wait`: block until the human clicks Finish Review or Cancel.
+- `--wait`: block until Finish Review or Cancel.
 - `--json`: print machine-readable output for agents.
 - `--open` / `--no-open`: control browser opening.
-- `--storage-dir <path>`: override state location for tests or isolated runs.
+- `--port <port>`: bind a specific local port.
+- `--storage-dir <path>`: use isolated local state.
 
-Keep the command set intentionally small. `export` and `verify` should not be
-v1 commands.
+Do not add standalone `export` or `verify` commands for v1. The existing
+feedback export remains an internal API/UI feature used by Copy Feedback and
+Finish Review.
 
 ## Human Workflow
-Start a review:
+
+Normal review:
 
 ```bash
 spec-reviewer review path/to/spec.md
 ```
 
-The CLI should resolve the source path, create or reuse a session, snapshot the
-source text and digest, start the loopback server, and open the browser unless
-`--no-open` is passed.
+The app opens in the browser with rendered Markdown, source view, annotations,
+copy feedback, recent reviews, and source drift warnings.
 
-The UI should support rendered Markdown, source view, annotations, Finish
-Review, Cancel, copy feedback, and recent sessions.
-
-Past sessions:
+Past reviews:
 
 ```bash
 spec-reviewer sessions
 spec-reviewer open <session-id>
 ```
 
-Export is a result of Finish Review, not a separate v1 command. When the human
-finishes, the UI should produce the final feedback payload, `--wait --json`
-should print it to stdout, copy feedback should remain available for manual
-workflows, and the session should record the finished status and final feedback.
+The current session ID is the existing stable path-key used by the file-backed
+review store. A generated session-ID state model can come later if it earns its
+complexity.
 
 ## Agent Workflow
-After writing or updating a spec, an agent should run:
+
+After writing a plan or spec, an agent runs:
 
 ```bash
 spec-reviewer review path/to/spec.md --wait --json
 ```
 
-The command should create or reuse a session, open the review UI, block until
-Finish Review or Cancel, exit zero with feedback JSON when finished, and exit
-non-zero when canceled.
+Flow:
 
-The JSON result should include session ID, source path, source digest reviewed
-by the human, status (`finished` or `canceled`), feedback text, and structured
-annotations when available. The agent applies feedback only after this command
-returns.
+1. The CLI starts the local server and opens the browser.
+2. The human adds notes.
+3. The human clicks Finish Review or Cancel.
+4. Finish prints `{ status, path, markdown }` JSON to stdout and exits zero.
+5. Cancel exits non-zero.
+6. The agent applies the Markdown feedback after the command returns.
+
+This is the reason `--wait` exists: it gives the agent a clean synchronization
+point with the human.
 
 ## Reopen And Drift
-Verification is reopening the same session after the source file changes, not a
-separate v1 command:
+
+There is no separate verification command in v1.
+
+After the agent edits the spec, reopen the saved review:
 
 ```bash
 spec-reviewer open <session-id>
 ```
 
-When reopened, Spec Reviewer should re-read the source path, compute the current
-digest, compare it with the stored snapshot digest, show whether the document
-changed, re-resolve annotation anchors where possible, and present moved,
-missing, or changed anchors as candidates.
+Spec Reviewer should re-read the live file, compare the current digest to the
+saved review digest, resolve stored anchors, and show whether notes are current,
+moved, or not found.
 
-Do not infer that feedback was applied just because text moved or disappeared.
-The UI can show candidates, but a human must confirm whether a note is applied,
-still open, or intentionally resolved.
+Moved or missing text is not proof that feedback was applied. It is only a
+candidate for human review.
 
 ## Local State
-Keep state under `~/.spec-reviewer`:
+
+Current state stays file-backed under `~/.spec-reviewer`:
 
 ```text
 ~/.spec-reviewer/
-  index.json
-  sessions/
-    <session-id>.json
+  reviews/
+    <path-key>.json
+  documents/
+    <digest>-<uploaded-name>.md
 ```
 
-`index.json` should contain only lightweight lookup data: version, session ID,
-source path, title, status, and updated timestamp.
+`reviews/<path-key>.json` stores the document path, digest, summary,
+annotations, timestamps, and anchor snapshots. Dropped files are copied into
+`documents/` because browsers do not expose the original absolute path.
 
-Each session should contain durable review data: version, session ID, source
-path, source digest, snapshot text, status, created and updated timestamps,
-annotations, and final feedback.
+Do not introduce a larger generation model for v1. The useful behavior is:
+store the reviewed digest and anchor text, then show drift when the live file
+changes.
 
-Annotation records should include stable ID, selected or anchor text, source
-range when available, note text, status, and timestamps. Useful statuses are
-`open`, `candidate`, `applied`, `resolved`, and `reopened`.
+## Release Follow-Ups
 
-Avoid an elaborate generation model for v1. A session needs source path,
-digest, snapshot text, annotations, and final feedback. Reopening can compare
-the current file to that stored snapshot.
+The next release work is:
 
-## Skill Installer
-Skill commands:
+1. Build platform release artifacts.
+2. Add GitHub release packaging.
+3. Add the Homebrew tap/formula that installs the binary artifact.
+4. Test Homebrew install from the release artifact.
+5. Add `spec-reviewer skill install --target codex|claude` after the binary
+   release path is settled.
+6. Optionally reserve/publish npm only as a fallback channel.
+7. Revisit code signing and notarization after real Homebrew testing.
+
+Skill installer target, when added:
+
+- bundle skill templates in the release artifact
+- support `--dry-run`
+- print the destination before writing
+- never overwrite without backup
+- teach agents to run `spec-reviewer review <path> --wait --json`
+
+## Release Checks
+
+Required checks for the current slice:
 
 ```bash
-spec-reviewer skill install --target codex|claude
-spec-reviewer skill print --target codex|claude
+pnpm install --frozen-lockfile
+pnpm run check
+pnpm run build:binary
+pnpm run binary:smoke
 ```
 
-Installer rules: bundle templates in the release artifact, print the
-destination before writing, avoid overwriting existing files without a backup,
-support `--dry-run`, and teach agents to use
-`spec-reviewer review <path> --wait --json`.
+Manual/browser checks:
 
-## Release Hardening
-Required checks before release:
+- open the compiled binary-served app
+- add an annotation
+- verify feedback export updates
+- click Finish Review in a `--wait --json` session
+- verify the waiting CLI prints JSON and exits zero
 
-- `pnpm install --frozen-lockfile`
-- `pnpm run check`
-- `pnpm run build`
-- Bun binary build succeeds
-- Bun binary smoke runs `spec-reviewer --help`
-- Bun binary smoke starts `spec-reviewer review <fixture> --no-open`
-- browser smoke against the built app
-- Homebrew formula install test from the release artifact
-- package artifact content audit
+Security checks:
 
-Security checks: loopback bind by default, non-loopback hosts rejected unless
-explicitly allowed for tests, Host and Origin validation, CSP present and not
-weakened, no raw Markdown HTML injection into the main DOM, sandboxed artifact
-iframes without `allow-same-origin`, local user-controlled storage, and
-unguessable-enough session IDs for local URLs.
-
-Supply-chain checks: exact dependency pins, new external pins following the
-repo dependency policy, no surprising install-time scripts, and release
-artifacts excluding local stores, secrets, `.env` files, and development-only
-directories.
+- loopback bind by default
+- Host and Origin validation
+- CSP present and not weakened
+- no raw Markdown HTML injection into the main DOM
+- artifact iframe sandbox stays strict
+- local storage remains user-controlled
 
 ## Acceptance Criteria
+
 - A user can install with Homebrew and run `spec-reviewer review spec.md`.
-- The installed command runs without the user's Node version mattering.
+- The installed command runs without relying on the user's Node version.
 - `spec-reviewer <path>` remains compatible with `review <path>`.
 - An agent can run `spec-reviewer review spec.md --wait --json` and receive
   human feedback on stdout.
-- A canceled review exits non-zero for agents.
-- A user can list and reopen prior sessions.
-- Reopening a changed file shows drift or candidate resolution without
-  auto-closing feedback.
+- Cancel exits non-zero for agents.
+- A user can list and reopen saved reviews.
+- Reopening a changed file shows drift without auto-closing feedback.
 - Release checks cover pnpm validation, Bun binary smoke, browser smoke,
   Homebrew formula install, and security review.
