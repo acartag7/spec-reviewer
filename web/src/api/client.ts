@@ -1,4 +1,4 @@
-import type { OpenDocumentResult, RecentReview, Review, ReviewDraft } from "@/api/types"
+import type { OpenDocumentResult, RecentReview, Review, ReviewCompletion, ReviewDraft } from "@/api/types"
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const response = await fetch(path, {
@@ -15,7 +15,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 export const api = {
-  config: () => request<{ defaultDocumentPath: string | null }>("GET", "/api/config"),
+  config: () => request<{ defaultDocumentPath: string | null; waitForReview: boolean }>("GET", "/api/config"),
   recentReviews: () => request<RecentReview[]>("GET", "/api/reviews"),
   openDocument: (path: string) => {
     const encoded = encodeURIComponent(path)
@@ -29,4 +29,6 @@ export const api = {
     const encoded = encodeURIComponent(path)
     return request<{ markdown: string }>("GET", `/api/export?path=${encoded}`)
   },
+  finishReview: (path: string) => request<ReviewCompletion>("POST", "/api/session/finish", { path }),
+  cancelReview: (path: string) => request<ReviewCompletion>("POST", "/api/session/cancel", { path }),
 }

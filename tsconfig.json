@@ -12,6 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "isolatedModules": true,
+    "ignoreDeprecations": "6.0",
     "resolveJsonModule": true,
     "jsx": "react-jsx",
     "baseUrl": ".",

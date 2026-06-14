@@ -104,6 +104,24 @@ export function ReviewerPage() {
     onError: (error) => showStatus(error instanceof Error ? error.message : String(error)),
   })
 
+  const finishMutation = useMutation({
+    mutationFn: () => {
+      if (document == null) throw new Error("Open a document first")
+      return api.finishReview(document.path)
+    },
+    onSuccess: () => showStatus("Review finished"),
+    onError: (error) => showStatus(error instanceof Error ? error.message : String(error)),
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: () => {
+      if (document == null) throw new Error("Open a document first")
+      return api.cancelReview(document.path)
+    },
+    onSuccess: () => showStatus("Review canceled"),
+    onError: (error) => showStatus(error instanceof Error ? error.message : String(error)),
+  })
+
   function openPath(path: string) {
     if (path.trim() === "") {
       showStatus("Enter a Markdown path")
@@ -154,10 +172,20 @@ export function ReviewerPage() {
 
   const canCopy = document != null
   const exportMarkdown = exportQuery.data?.markdown ?? ""
+  const finishing = finishMutation.isPending || cancelMutation.isPending
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
-      <TopBar path={document?.path ?? requestedPath} sourceState={sourceState} canCopy={canCopy} onCopy={copyExport} />
+      <TopBar
+        path={document?.path ?? requestedPath}
+        sourceState={sourceState}
+        canCopy={canCopy}
+        waitForReview={configQuery.data?.waitForReview ?? false}
+        finishing={finishing}
+        onCopy={copyExport}
+        onFinish={() => finishMutation.mutate()}
+        onCancel={() => cancelMutation.mutate()}
+      />
       {document != null && review != null ? (
         <Workspace
           document={document}

@@ -42,6 +42,12 @@ export class ReviewerService {
     return { document, review: withResolvedAnchors(document, stored), stale, sourceState: stale ? "changed" : "current" };
   }
 
+  async documentPathForSession(id: string): Promise<string> {
+    const review = await this.store.loadById(id);
+    if (review == null) throw new Error("session not found");
+    return review.documentPath;
+  }
+
   async saveReview(draft: ReviewDraft): Promise<Review> {
     const { document } = await this.reader.readMarkdown(draft.path);
     const previous = await this.store.load(document.path);
@@ -55,7 +61,11 @@ export class ReviewerService {
       (line) => sectionForLine(document, line),
       (annotation) => {
         const previousAnchor = previousAnchors.get(annotation.id);
-        if (sameSavedRange(previousAnchor, annotation) && previousAnchor.anchorText != null) {
+        if (
+          previousAnchor != null
+          && sameSavedRange(previousAnchor, annotation)
+          && previousAnchor.anchorText != null
+        ) {
           return previousAnchor.anchorText;
         }
         return sourceTextForLines(document, annotation.lineStart, annotation.lineEnd);

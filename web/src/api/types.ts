@@ -61,6 +61,7 @@ export interface OpenDocumentResult {
 }
 
 export interface RecentReview {
+  id: string
   documentPath: string
   title: string
   documentDigest: string
@@ -82,3 +83,7 @@ export interface ReviewDraft {
   summary: string
   annotations: Annotation[]
 }
+
+export type ReviewCompletion =
+  | { status: "finished"; path: string; markdown: string }
+  | { status: "canceled"; path: string; reason: string | null }

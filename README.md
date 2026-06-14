@@ -18,12 +18,27 @@ file changes, and exports clean Markdown feedback for an agent or teammate.
 - Preview fenced HTML/SVG artifacts only after an explicit sandboxed render.
 - Reopen previous reviews from the recent reviews list.
 - Export Markdown instructions grouped by severity.
-- Run as a loopback-only Node server with a React/Vite frontend.
+- Run as a loopback-only bundled binary for users, with a Node/Vite dev setup
+  for contributors.
 
-## Requirements
+## User Install
+
+The public install path is Homebrew:
+
+```bash
+brew tap acartag7/tap
+brew install spec-reviewer
+spec-reviewer review path/to/spec.md
+```
+
+The release artifact is a Bun-compiled binary, so normal users should not need
+to manage Node, pnpm, or project dependencies.
+
+## Development Requirements
 
 - Node.js 24 or newer.
 - pnpm 10.32.0 or newer.
+- Bun 1.3.6 or newer for binary builds.
 
 ## Supply Chain Policy
 
@@ -34,7 +49,7 @@ file changes, and exports clean Markdown feedback for an agent or teammate.
 - Do not add postinstall-dependent packages without a specific reason.
 - See [docs/dependencies.md](docs/dependencies.md).
 
-## Install
+## Install For Development
 
 ```bash
 pnpm install
@@ -56,13 +71,21 @@ http://127.0.0.1:5173
 ## Run The Built App
 
 ```bash
-pnpm start -- path/to/spec.md
-pnpm start -- --port 3220 path/to/spec.md
-pnpm start -- --storage-dir ~/.spec-reviewer path/to/spec.md
+pnpm start -- review path/to/spec.md
+pnpm start -- review --port 3220 path/to/spec.md
+pnpm start -- review --storage-dir ~/.spec-reviewer path/to/spec.md
 ```
 
 The production server serves the built app and API from `127.0.0.1:3217` by
 default.
+
+## Build The Binary
+
+```bash
+pnpm run build:binary
+./build/spec-reviewer review path/to/spec.md
+./build/spec-reviewer review path/to/spec.md --wait --json
+```
 
 ## Data Storage
 
@@ -101,6 +124,8 @@ See [docs/security-model.md](docs/security-model.md).
 
 ```bash
 pnpm run check
+pnpm run build:binary
+pnpm run binary:smoke
 ```
 
 The code follows a DDD-lite layout:
