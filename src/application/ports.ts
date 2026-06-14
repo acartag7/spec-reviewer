@@ -4,6 +4,7 @@ import type { Review } from "../domain/review.ts";
 export type ReviewSourceState = "unreviewed" | "current" | "changed" | "missing";
 
 export interface StoredReviewSummary {
+  id: string;
   documentPath: string;
   title: string;
   documentDigest: string;
@@ -23,6 +24,7 @@ export interface DocumentReader {
 
 export interface ReviewStore {
   load(documentPath: string): Promise<Review | null>;
+  loadById(id: string): Promise<Review | null>;
   save(review: Review): Promise<void>;
   listRecent(limit: number): Promise<StoredReviewSummary[]>;
 }

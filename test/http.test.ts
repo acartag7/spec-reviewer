@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { ReviewerService } from "../src/application/reviewer-service.ts";
+import { ReviewSessionWaiter } from "../src/application/review-session.ts";
 import { FileDocumentReader } from "../src/infrastructure/file-document-reader.ts";
 import { JsonReviewStore } from "../src/infrastructure/json-review-store.ts";
 import { createHttpServer } from "../src/interfaces/http/http-server.ts";
@@ -20,6 +21,11 @@ test("HTTP API opens, saves, and exports a review", async (t) => {
     port: 0,
     storageDir: join(dir, "store"),
     defaultDocumentPath: docPath,
+    sessionId: null,
+    command: "review",
+    waitForReview: false,
+    jsonOutput: false,
+    openBrowser: false,
     source: { maxFileLines: 250 },
   };
   const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir));
@@ -74,6 +80,7 @@ test("HTTP API opens, saves, and exports a review", async (t) => {
 
   const recent = await json(`${base}/api/reviews`);
   assert.equal(recent[0].sourceState, "changed");
+  assert.equal(await service.documentPathForSession(recent[0].id), docPath);
 });
 
 test("HTTP API resolves moved annotation anchors without changing saved lines", async (t) => {
@@ -85,6 +92,11 @@ test("HTTP API resolves moved annotation anchors without changing saved lines", 
     port: 0,
     storageDir: join(dir, "store"),
     defaultDocumentPath: docPath,
+    sessionId: null,
+    command: "review",
+    waitForReview: false,
+    jsonOutput: false,
+    openBrowser: false,
     source: { maxFileLines: 250 },
   };
   const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir));
@@ -145,6 +157,11 @@ test("HTTP server rejects non-loopback Host and Origin headers", async (t) => {
     port: 0,
     storageDir: join(dir, "store"),
     defaultDocumentPath: null,
+    sessionId: null,
+    command: "review",
+    waitForReview: false,
+    jsonOutput: false,
+    openBrowser: false,
     source: { maxFileLines: 250 },
   };
   const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir));
@@ -167,6 +184,51 @@ test("HTTP server rejects non-loopback Host and Origin headers", async (t) => {
   const accepted = await rawStatus(address.port, "/api/health", { Host: `127.0.0.1:${address.port}` });
   assert.equal(accepted.status, 200);
   assert.match(accepted.headers["content-security-policy"] ?? "", /default-src 'self'/);
+});
+
+test("HTTP API finish resolves a waiting review session", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "spec-reviewer-"));
+  const docPath = join(dir, "README.md");
+  await writeFile(docPath, "# Demo\n\nNeeds review\n", "utf8");
+  const config: AppConfig = {
+    host: "127.0.0.1",
+    port: 0,
+    storageDir: join(dir, "store"),
+    defaultDocumentPath: docPath,
+    sessionId: null,
+    command: "review",
+    waitForReview: true,
+    jsonOutput: false,
+    openBrowser: false,
+    source: { maxFileLines: 250 },
+  };
+  const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir));
+  const waiter = new ReviewSessionWaiter(docPath);
+  const server = createHttpServer(config, service, join(process.cwd(), "public"), waiter);
+  t.after(() => server.close());
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.notEqual(address, null);
+  assert.notEqual(typeof address, "string");
+  const base = `http://127.0.0.1:${address.port}`;
+
+  await json(`${base}/api/review`, {
+    method: "POST",
+    body: JSON.stringify({
+      path: docPath,
+      annotations: [{ lineStart: 3, lineEnd: 3, kind: "issue", severity: "major", note: "Fix this" }],
+    }),
+    headers: { "content-type": "application/json" },
+  });
+  const response = await json(`${base}/api/session/finish`, {
+    method: "POST",
+    body: JSON.stringify({ path: docPath }),
+    headers: { "content-type": "application/json" },
+  });
+  const completion = await waiter.wait();
+  assert.equal(response.status, "finished");
+  assert.equal(completion.status, "finished");
+  assert.match(completion.status === "finished" ? completion.markdown : "", /Fix this/);
 });
 
 async function json(url: string, init?: RequestInit): Promise<any> {

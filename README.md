@@ -1,29 +1,55 @@
 # Spec Reviewer
 
-Local-first Markdown spec reviewer for source-anchored feedback.
+Local-first Markdown spec reviewer for source-anchored agent feedback.
 
-![Spec Reviewer screenshot](docs/assets/screenshot.jpg)
+## Install With Homebrew
 
-Spec Reviewer runs on your machine, opens local Markdown files, lets you annotate
-rendered or source text by line, tracks whether saved anchors drift after the
-file changes, and exports clean Markdown feedback for an agent or teammate.
+```bash
+brew tap acartag7/tap
+brew install spec-reviewer
+spec-reviewer review path/to/spec.md
+```
 
-## Features
+Homebrew installs a bundled binary. You do not need Node, pnpm, Bun, or project
+dependencies to use the app.
 
-- Open any local `.md` or `.markdown` file.
-- Drop a Markdown file into the start screen, or paste a local file path.
-- Read rendered Markdown by default with a source toggle for line inspection.
-- Add line, block, or text-selection anchored annotations.
-- See inline note markers and per-note anchor drift state.
-- Preview fenced HTML/SVG artifacts only after an explicit sandboxed render.
-- Reopen previous reviews from the recent reviews list.
-- Export Markdown instructions grouped by severity.
-- Run as a loopback-only Node server with a React/Vite frontend.
+![Spec Reviewer showing a local review with open notes and agent export](docs/assets/screenshot.jpg)
 
-## Requirements
+## Agent Handoff
+
+```bash
+spec-reviewer review path/to/spec.md --wait --json
+```
+
+`--wait` keeps the command open until the human clicks Finish Review or Cancel.
+On finish, the command prints Markdown feedback for the agent to apply.
+
+## What It Does
+
+- Opens local `.md` and `.markdown` files.
+- Lets you review rendered Markdown or source lines.
+- Adds line, block, or selected-text notes.
+- Tracks whether saved anchors are current, moved, or missing after edits.
+- Reopens previous reviews from local state.
+- Exports agent-ready Markdown feedback grouped by severity.
+- Runs loopback-only from a bundled binary.
+
+## Agent Skill Install
+
+```bash
+spec-reviewer skill install --target codex
+spec-reviewer skill install --target claude
+spec-reviewer skill print --target codex
+```
+
+Skill install backs up existing files before overwriting. User scope writes to
+the agent's home skills directory; project scope writes under the current repo.
+
+## Development Requirements
 
 - Node.js 24 or newer.
 - pnpm 10.32.0 or newer.
+- Bun 1.3.6 or newer for binary builds.
 
 ## Supply Chain Policy
 
@@ -34,7 +60,7 @@ file changes, and exports clean Markdown feedback for an agent or teammate.
 - Do not add postinstall-dependent packages without a specific reason.
 - See [docs/dependencies.md](docs/dependencies.md).
 
-## Install
+## Install For Development
 
 ```bash
 pnpm install
@@ -56,13 +82,21 @@ http://127.0.0.1:5173
 ## Run The Built App
 
 ```bash
-pnpm start -- path/to/spec.md
-pnpm start -- --port 3220 path/to/spec.md
-pnpm start -- --storage-dir ~/.spec-reviewer path/to/spec.md
+pnpm start -- review path/to/spec.md
+pnpm start -- review --port 3220 path/to/spec.md
+pnpm start -- review --storage-dir ~/.spec-reviewer path/to/spec.md
 ```
 
 The production server serves the built app and API from `127.0.0.1:3217` by
 default.
+
+## Build The Binary
+
+```bash
+pnpm run build:binary
+./build/spec-reviewer review path/to/spec.md
+./build/spec-reviewer review path/to/spec.md --wait --json
+```
 
 ## Data Storage
 
@@ -101,7 +135,20 @@ See [docs/security-model.md](docs/security-model.md).
 
 ```bash
 pnpm run check
+pnpm run build:binary
+pnpm run binary:smoke
 ```
+
+## Release
+
+```bash
+pnpm run release:artifacts
+pnpm run release:artifacts:all -- --version 0.1.0
+pnpm run homebrew:smoke
+```
+
+Release artifacts and the generated Homebrew formula are written under
+`artifacts/`. See [docs/release.md](docs/release.md).
 
 The code follows a DDD-lite layout:
 

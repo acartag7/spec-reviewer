@@ -1,4 +1,4 @@
-import { Copy, FileText } from "lucide-react"
+import { CheckCircle2, Copy, FileText, XCircle } from "lucide-react"
 import {
   Breadcrumb,
   BreadcrumbEllipsis,
@@ -16,10 +16,14 @@ interface TopBarProps {
   path: string
   sourceState: ReviewSourceState
   canCopy: boolean
+  waitForReview: boolean
+  finishing: boolean
   onCopy: () => void
+  onFinish: () => void
+  onCancel: () => void
 }
 
-export function TopBar({ path, sourceState, canCopy, onCopy }: TopBarProps) {
+export function TopBar({ path, sourceState, canCopy, waitForReview, finishing, onCopy, onFinish, onCancel }: TopBarProps) {
   return (
     <header className="flex min-h-14 items-center gap-3 border-b bg-background px-4">
       <div className="flex min-w-fit items-center gap-2 font-heading text-sm font-semibold">
@@ -34,6 +38,18 @@ export function TopBar({ path, sourceState, canCopy, onCopy }: TopBarProps) {
         <Copy />
         Copy feedback
       </Button>
+      {waitForReview ? (
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={onCancel} disabled={finishing}>
+            <XCircle />
+            Cancel
+          </Button>
+          <Button type="button" size="sm" onClick={onFinish} disabled={!canCopy || finishing}>
+            <CheckCircle2 />
+            Finish review
+          </Button>
+        </div>
+      ) : null}
     </header>
   )
 }

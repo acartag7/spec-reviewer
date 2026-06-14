@@ -1,5 +1,7 @@
 node_modules/
+build/
 dist/
+artifacts/
 .design/
 .codex/
 .pnpm-store*/

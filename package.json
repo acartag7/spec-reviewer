@@ -14,16 +14,17 @@
   ],
   "engines": {
     "node": ">=24",
-    "pnpm": ">=10.32.0"
+    "pnpm": ">=10.32.0",
+    "bun": ">=1.3.6"
   },
   "bin": {
     "spec-reviewer": "bin/spec-reviewer.js"
   },
   "files": [
+    "build/",
     "bin/",
     "dist/",
     "docs/",
-    "src/",
     "CONTRIBUTING.md",
     "README.md",
     "LICENSE"
@@ -32,8 +33,15 @@
     "check": "pnpm run check:syntax && pnpm run check:lines && pnpm run test",
     "check:lines": "node --no-warnings src/dev/check-line-limits.ts",
     "check:syntax": "find src test \\( -name '*.ts' -o -name '*.js' \\) -print0 | xargs -0 -n1 node --check && tsc --noEmit",
-    "build": "vite build --config web/vite.config.ts && tsc --noEmit",
+    "build": "pnpm run build:server && vite build --config web/vite.config.ts && tsc --noEmit",
+    "build:binary": "pnpm run build && bun build --compile binary/spec-reviewer.ts --outfile build/spec-reviewer",
+    "build:server": "node -e \"require('node:fs').rmSync('build',{recursive:true,force:true})\" && tsc -p tsconfig.server.json",
+    "binary:smoke": "node scripts/binary-smoke.js",
     "dev": "concurrently -k -n api,web \"node --no-warnings src/server.ts\" \"vite --config web/vite.config.ts --host 127.0.0.1\"",
+    "release:artifacts": "node scripts/package-release.js",
+    "release:artifacts:all": "node scripts/package-release.js --target bun-darwin-arm64 --target bun-darwin-x64 --target bun-linux-x64-baseline --target bun-linux-arm64",
+    "homebrew:smoke": "scripts/homebrew-smoke.sh",
+    "tap:update": "node scripts/update-homebrew-tap.js",
     "start": "node --no-warnings src/server.ts",
     "test": "node --no-warnings --test test/*.test.ts && vitest run --config web/vite.config.ts"
   },
@@ -58,12 +66,14 @@
   "devDependencies": {
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
+    "@types/node": "25.9.1",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.1",
     "concurrently": "9.2.1",
     "jsdom": "29.0.1",
     "shadcn": "4.1.2",
+    "typescript": "6.0.3",
     "vite": "8.0.5",
     "vitest": "3.2.4"
   }

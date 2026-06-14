@@ -7,6 +7,7 @@ Package manager and runtime floor:
 - `packageManager`: `pnpm@10.32.0`
 - `node`: `>=24`
 - `pnpm`: `>=10.32.0`
+- `bun`: `>=1.3.6` for release binary builds
 
 ## Freshness Notes
 
@@ -41,12 +42,14 @@ No exact publish dates were included in this handoff. Treat the 2026-06-13 verif
 | --- | --- | --- |
 | `@testing-library/jest-dom` | `6.9.1` | Verified >=15 days old on 2026-06-13 |
 | `@testing-library/react` | `16.3.2` | Verified >=15 days old on 2026-06-13 |
+| `@types/node` | `25.9.1` | Published 2026-05-19; added for project-local server compilation |
 | `@types/react` | `19.2.14` | Verified >=15 days old on 2026-06-13 |
 | `@types/react-dom` | `19.2.3` | Verified >=15 days old on 2026-06-13 |
 | `@vitejs/plugin-react` | `6.0.1` | Verified >=15 days old on 2026-06-13 |
 | `concurrently` | `9.2.1` | Verified >=15 days old on 2026-06-13 |
 | `jsdom` | `29.0.1` | Verified >=15 days old on 2026-06-13 |
 | `shadcn` | `4.1.2` | Verified >=15 days old on 2026-06-13 |
+| `typescript` | `6.0.3` | Published 2026-04-16; added for project-local builds |
 | `vite` | `8.0.5` | Verified >=15 days old on 2026-06-13 |
 | `vitest` | `3.2.4` | Pinned because `3.2.6` failed the minimum-release-age install gate |
 

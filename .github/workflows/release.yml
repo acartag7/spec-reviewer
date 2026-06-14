@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v0.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        run: |
+          TAG_NAME="${{ github.event.inputs.tag || github.ref_name }}"
+          [[ "$TAG_NAME" == v* ]] || TAG_NAME="v$TAG_NAME"
+          if [[ ! "$TAG_NAME" =~ ^v[0-9]+(\.[0-9]+)*([.-][A-Za-z0-9]+)*$ ]]; then
+            echo "::error::Invalid release tag: $TAG_NAME"
+            exit 1
+          fi
+          git fetch --force --tags
+          git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null || {
+            echo "::error::Release tag does not exist: $TAG_NAME"
+            exit 1
+          }
+          git checkout --detach "refs/tags/$TAG_NAME"
+          echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG_NAME#v}" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.6
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - name: Build release artifacts
+        run: pnpm run release:artifacts:all -- --version "${{ steps.release.outputs.version }}"
+      - name: Smoke native release artifact
+        run: |
+          mkdir -p build/native-smoke
+          tar -xzf "artifacts/spec-reviewer-${{ steps.release.outputs.tag }}-linux-x64.tar.gz" -C build/native-smoke --strip-components=1
+          SPEC_REVIEWER_BINARY="$PWD/build/native-smoke/spec-reviewer" pnpm run binary:smoke
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG_NAME="${{ steps.release.outputs.tag }}"
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" artifacts/*.tar.gz artifacts/SHA256SUMS artifacts/homebrew/spec-reviewer.rb --clobber
+          else
+            gh release create "$TAG_NAME" artifacts/*.tar.gz artifacts/SHA256SUMS artifacts/homebrew/spec-reviewer.rb --title "$TAG_NAME" --generate-notes
+          fi
+      - name: Update Homebrew tap
+        if: ${{ env.HOMEBREW_TAP_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ env.HOMEBREW_TAP_TOKEN }}
+        run: pnpm run tap:update -- --formula artifacts/homebrew/spec-reviewer.rb --tap acartag7/homebrew-tap

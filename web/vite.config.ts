@@ -5,6 +5,7 @@ import { defineConfig } from "vitest/config"
 
 export default defineConfig({
   root: __dirname,
+  base: "./",
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

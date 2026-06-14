@@ -21,6 +21,17 @@ export class JsonReviewStore implements ReviewStore {
     }
   }
 
+  async loadById(id: string): Promise<Review | null> {
+    if (!/^[a-f0-9]{32}$/.test(id)) throw new Error("session id is invalid");
+    try {
+      const raw = await readFile(join(this.reviewDir(), `${id}.json`), "utf8");
+      return JSON.parse(raw) as Review;
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
+  }
+
   async save(review: Review): Promise<void> {
     await mkdir(this.reviewDir(), { recursive: true, mode: 0o700 });
     await writeFile(this.filePath(review.documentPath), `${JSON.stringify(review, null, 2)}\n`, {
@@ -56,6 +67,7 @@ export class JsonReviewStore implements ReviewStore {
     try {
       const review = JSON.parse(await readFile(join(this.reviewDir(), entry), "utf8")) as Review;
       return {
+        id: entry.replace(/\.json$/, ""),
         documentPath: review.documentPath,
         title: basename(review.documentPath),
         documentDigest: review.documentDigest,
