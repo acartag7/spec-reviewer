@@ -69,7 +69,7 @@ The workflow:
 
 ## Homebrew Tap
 
-The tap repository should be:
+Use the shared acartag7 tap repository, not a Spec Reviewer-specific tap:
 
 ```text
 acartag7/homebrew-tap
@@ -87,6 +87,8 @@ The generated formula is:
 ```text
 artifacts/homebrew/spec-reviewer.rb
 ```
+
+Spec Reviewer owns only `Formula/spec-reviewer.rb` inside that shared tap.
 
 To update the tap locally after building artifacts:
 

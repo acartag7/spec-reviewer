@@ -23,7 +23,7 @@ file changes, and exports clean Markdown feedback for an agent or teammate.
 
 ## User Install
 
-The public install path is Homebrew:
+The public install path is the shared `acartag7/tap` Homebrew tap:
 
 ```bash
 brew tap acartag7/tap

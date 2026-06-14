@@ -214,7 +214,7 @@ and teaches agents to run `spec-reviewer review <path> --wait --json`.
 
 Remaining release setup is external:
 
-1. Create or grant access to `acartag7/homebrew-tap`.
+1. Keep `acartag7/homebrew-tap` as the shared tap for all acartag7 tools.
 2. Add `HOMEBREW_TAP_TOKEN` if the GitHub release workflow should push the tap.
 3. Optionally reserve/publish npm only as a fallback channel.
 4. Revisit code signing and notarization after real Homebrew testing.
