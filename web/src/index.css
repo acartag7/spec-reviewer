@@ -5,6 +5,7 @@
 @import "@fontsource-variable/jetbrains-mono";
 @import "./artifact.css";
 @import "./reader.css";
+@import "./theme.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -43,56 +44,8 @@
   --radius-xl: calc(var(--radius) * 1.4);
 }
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --card: #ffffff;
-  --card-foreground: #171717;
-  --popover: #ffffff;
-  --popover-foreground: #171717;
-  --primary: #0a0a0a;
-  --primary-foreground: #ffffff;
-  --secondary: #f5f5f5;
-  --secondary-foreground: #171717;
-  --muted: #fafafa;
-  --muted-foreground: #5f5f5f;
-  --accent: #f4f4f5;
-  --accent-foreground: #171717;
-  --destructive: #e5484d;
-  --border: #eaeaea;
-  --input: #e4e4e4;
-  --ring: #0a0a0a;
-  --radius: 0.625rem;
-  --sev-blocker: #e5484d;
-  --sev-major: #f59e0b;
-  --sev-minor: #8f8f8f;
-  --sev-note: #8f8f8f;
-  --ok: #1a7f37;
-}
-
-.dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-  --card: #111111;
-  --card-foreground: #ededed;
-  --popover: #161616;
-  --popover-foreground: #ededed;
-  --primary: #ededed;
-  --primary-foreground: #0a0a0a;
-  --secondary: #1a1a1a;
-  --secondary-foreground: #ededed;
-  --muted: #161616;
-  --muted-foreground: #a1a1a1;
-  --accent: #1f1f1f;
-  --accent-foreground: #ededed;
-  --destructive: #f27070;
-  --border: #232323;
-  --input: #2a2a2a;
-  --ring: #d4d4d4;
-  --sev-blocker: #f27070;
-  --sev-major: #f5b23b;
-  --ok: #3dd68c;
-}
+/* Theme tokens (light default, .dark override, system prefers-color-scheme rule)
+   live in ./theme.css. */
 
 @layer base {
   * {

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import type { ReviewSourceState } from "@/api/types"
 import { pathCrumbs } from "@/lib/path-utils"
 import { SourceStateBadge } from "@/components/SourceState"
+import { ThemeToggle } from "@/components/ThemeToggle"
 
 interface TopBarProps {
   path: string
@@ -34,6 +35,7 @@ export function TopBar({ path, sourceState, canCopy, waitForReview, finishing, o
         <PathBreadcrumb path={path} />
       </div>
       <SourceStateBadge state={sourceState} />
+      <ThemeToggle />
       <Button type="button" size="sm" onClick={onCopy} disabled={!canCopy}>
         <Copy />
         Copy feedback
