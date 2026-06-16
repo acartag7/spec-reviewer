@@ -104,8 +104,8 @@ async function routeApi(
   if (request.method === "POST" && url.pathname === "/api/session/finish") {
     if (waitSession == null) return json({ error: { message: "No waiting review session" } }, 409);
     const { path } = readSessionAction(await readJson(request));
-    const { markdown } = await service.exportReview(path);
-    return json(waitSession.finish(path, markdown));
+    const exported = await service.exportReview(path);
+    return json(waitSession.finish(path, exported.markdown, exported.openAnnotations, exported.carriedOver));
   }
   if (request.method === "POST" && url.pathname === "/api/session/cancel") {
     if (waitSession == null) return json({ error: { message: "No waiting review session" } }, 409);
