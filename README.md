@@ -122,6 +122,13 @@ Each annotation also stores a source-text snapshot. If the file changes, Spec
 Reviewer marks notes as `ok`, `moved`, or `not-found` and warns in the export
 instead of silently relocating edits.
 
+On a later pass over a changed file, notes saved against an older digest whose
+source text has disappeared (`not-found`) are treated as **carried over**: the
+agent export groups them separately instead of listing them as open action items,
+because the edit that removed the text most likely already addressed them.
+Relocated (`moved`) notes are still flagged so relocations are never silently
+applied.
+
 ## Security Model
 
 The API can read local Markdown files by path, so the server binds only to
