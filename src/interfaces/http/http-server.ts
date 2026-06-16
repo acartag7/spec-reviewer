@@ -79,8 +79,8 @@ async function routeApi(
       return;
     }
     const { path } = readSessionAction(await readJson(req));
-    const { markdown } = await service.exportReview(path);
-    sendJson(res, 200, waitSession.finish(path, markdown));
+    const exported = await service.exportReview(path);
+    sendJson(res, 200, waitSession.finish(path, exported.markdown, exported.openAnnotations, exported.carriedOver));
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/session/cancel") {

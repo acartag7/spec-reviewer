@@ -85,5 +85,5 @@ export interface ReviewDraft {
 }
 
 export type ReviewCompletion =
-  | { status: "finished"; path: string; markdown: string }
+  | { status: "finished"; path: string; markdown: string; openAnnotations: number; carriedOver: number }
   | { status: "canceled"; path: string; reason: string | null }

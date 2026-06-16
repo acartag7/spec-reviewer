@@ -1,5 +1,5 @@
 export type ReviewCompletion =
-  | { status: "finished"; path: string; markdown: string }
+  | { status: "finished"; path: string; markdown: string; openAnnotations: number; carriedOver: number }
   | { status: "canceled"; path: string; reason: string | null };
 
 export class ReviewSessionWaiter {
@@ -23,8 +23,8 @@ export class ReviewSessionWaiter {
     return this.waitPromise;
   }
 
-  finish(path: string, markdown: string): ReviewCompletion {
-    return this.complete({ status: "finished", path, markdown });
+  finish(path: string, markdown: string, openAnnotations = 0, carriedOver = 0): ReviewCompletion {
+    return this.complete({ status: "finished", path, markdown, openAnnotations, carriedOver });
   }
 
   cancel(path: string, reason: string | null): ReviewCompletion {

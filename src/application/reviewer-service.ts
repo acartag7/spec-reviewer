@@ -8,7 +8,7 @@ import {
   type Review,
   type ReviewDraft,
 } from "../domain/review.ts";
-import { exportReviewMarkdown } from "./export-review.ts";
+import { exportReviewMarkdown, reviewExportCounts } from "./export-review.ts";
 import type { DocumentReader, RecentReview, ReviewSourceState, ReviewStore } from "./ports.ts";
 
 export interface OpenDocumentResult {
@@ -76,10 +76,14 @@ export class ReviewerService {
     return withResolvedAnchors(document, review);
   }
 
-  async exportReview(path: string): Promise<{ markdown: string }> {
+  async exportReview(path: string): Promise<{ markdown: string; openAnnotations: number; carriedOver: number }> {
     const { document } = await this.reader.readMarkdown(path);
     const review = await this.store.load(document.path) ?? createEmptyReview(document.path, document.digest);
-    return { markdown: exportReviewMarkdown(document, withResolvedAnchors(document, review)) };
+    const resolved = withResolvedAnchors(document, review);
+    return {
+      markdown: exportReviewMarkdown(document, resolved),
+      ...reviewExportCounts(document, resolved),
+    };
   }
 
   async listRecentReviews(limit = 20): Promise<RecentReview[]> {

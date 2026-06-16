@@ -3,8 +3,15 @@ import type { Annotation, Review } from "../domain/review.ts";
 
 const severityOrder = ["blocker", "major", "minor", "note"] as const;
 
+export interface ReviewExportCounts {
+  /** Live, actionable open annotations (shown under "Required Changes"). */
+  openAnnotations: number;
+  /** Prior-pass open annotations suppressed from action items (shown under "Carried Over"). */
+  carriedOver: number;
+}
+
 export function exportReviewMarkdown(document: ReviewDocument, review: Review): string {
-  const open = review.annotations.filter((annotation) => annotation.status === "open");
+  const { live } = partitionOpen(document, review);
   const lines = [
     "# Agent Review Feedback",
     "",
@@ -19,12 +26,10 @@ export function exportReviewMarkdown(document: ReviewDocument, review: Review): 
       "",
     );
   }
-  const drifted = open.filter((annotation) => {
-    return annotation.anchor?.state === "moved" || annotation.anchor?.state === "not-found";
-  });
-  if (drifted.length > 0) {
+  const movedLive = live.filter((annotation) => annotation.anchor?.state === "moved");
+  if (movedLive.length > 0) {
     lines.push(
-      `Anchor warning: ${drifted.length} open annotation${drifted.length === 1 ? "" : "s"} no longer match saved lines exactly.`,
+      `Anchor warning: ${movedLive.length} open annotation${movedLive.length === 1 ? "" : "s"} relocated since saving; current lines shown below.`,
       "",
     );
   }
@@ -33,24 +38,53 @@ export function exportReviewMarkdown(document: ReviewDocument, review: Review): 
     lines.push("## Overall", "", review.summary.trim(), "");
   }
 
-  if (open.length === 0) {
+  if (live.length === 0) {
     lines.push("No open annotations.");
     return lines.join("\n");
   }
 
+  // Only current-version notes reach the agent copy. Prior-pass notes whose
+  // source text disappeared (carried over) are excluded entirely — they point at
+  // text that no longer exists, so they are not actionable, and the human had a
+  // chance to re-anchor any that still apply. The suppressed count is reported
+  // on the JSON completion via reviewExportCounts, not in this markdown.
   lines.push("## Required Changes", "");
   for (const severity of severityOrder) {
-    const group = open.filter((annotation) => annotation.severity === severity);
+    const group = live.filter((annotation) => annotation.severity === severity);
     if (group.length === 0) continue;
     lines.push(`### ${label(severity)}`, "");
     for (const annotation of group) {
       lines.push(...formatAnnotation(annotation), "");
     }
   }
-
   lines.push("## Instruction", "");
   lines.push("Address each open annotation, preserve existing behavior unless the note explicitly asks for a change, then report what changed and how you verified it.");
+
   return lines.join("\n");
+}
+
+export function reviewExportCounts(document: ReviewDocument, review: Review): ReviewExportCounts {
+  const { live, carriedOver } = partitionOpen(document, review);
+  return { openAnnotations: live.length, carriedOver: carriedOver.length };
+}
+
+/**
+ * Split open annotations into live action items and carried-over prior-pass notes.
+ *
+ * A note is carried over when its saved anchor text can no longer be found in the
+ * current file (anchor state "not-found") AND the review was saved against an older
+ * digest. That combination means the lines the note pointed at are gone — almost
+ * certainly because a prior edit addressed it. Carried-over notes are excluded from
+ * the agent markdown (they are not actionable) but still counted, so the completion
+ * can report how many were suppressed. "moved" notes (text still present, relocated)
+ * stay live so relocations are always flagged, never silently applied.
+ */
+function partitionOpen(document: ReviewDocument, review: Review): { live: Annotation[]; carriedOver: Annotation[] } {
+  const staleReview = review.documentDigest !== document.digest;
+  const open = review.annotations.filter((annotation) => annotation.status === "open");
+  const carriedOver = open.filter((annotation) => annotation.anchor?.state === "not-found" && staleReview);
+  const live = open.filter((annotation) => !(annotation.anchor?.state === "not-found" && staleReview));
+  return { live, carriedOver };
 }
 
 function formatAnnotation(annotation: Annotation): string[] {
