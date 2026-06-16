@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom"
 import { api } from "@/api/client"
 import type { Annotation, OpenDocumentResult, Review, ReviewDocument, ReviewSourceState, SelectionRange } from "@/api/types"
 import { StartScreen } from "@/components/StartScreen"
+import { SessionOutcomeScreen } from "@/components/SessionOutcomeScreen"
 import { StatusToast } from "@/components/StatusToast"
 import { TopBar } from "@/components/TopBar"
 import { Workspace } from "@/components/Workspace"
@@ -24,6 +25,7 @@ export function ReviewerPage() {
   const [form, setForm] = useState<AnnotationFormValue>(() => emptyForm(initialSelection))
   const [sourceState, setSourceState] = useState<ReviewSourceState>("unreviewed")
   const [status, setStatus] = useState("")
+  const [sessionOutcome, setSessionOutcome] = useState<{ outcome: "finished" | "canceled"; openAnnotations: number; carriedOver: number } | null>(null)
 
   const showStatus = useCallback((message: string) => {
     setStatus(message)
@@ -109,7 +111,9 @@ export function ReviewerPage() {
       if (document == null) throw new Error("Open a document first")
       return api.finishReview(document.path)
     },
-    onSuccess: () => showStatus("Review finished"),
+    onSuccess: (completion) => {
+      if (completion.status === "finished") setSessionOutcome({ outcome: "finished", openAnnotations: completion.openAnnotations, carriedOver: completion.carriedOver })
+    },
     onError: (error) => showStatus(error instanceof Error ? error.message : String(error)),
   })
 
@@ -118,7 +122,9 @@ export function ReviewerPage() {
       if (document == null) throw new Error("Open a document first")
       return api.cancelReview(document.path)
     },
-    onSuccess: () => showStatus("Review canceled"),
+    onSuccess: (completion) => {
+      if (completion.status === "canceled") setSessionOutcome({ outcome: "canceled", openAnnotations: 0, carriedOver: 0 })
+    },
     onError: (error) => showStatus(error instanceof Error ? error.message : String(error)),
   })
 
@@ -173,6 +179,10 @@ export function ReviewerPage() {
   const canCopy = document != null
   const exportMarkdown = exportQuery.data?.markdown ?? ""
   const finishing = finishMutation.isPending || cancelMutation.isPending
+
+  if (sessionOutcome != null) {
+    return <SessionOutcomeScreen outcome={sessionOutcome.outcome} openAnnotations={sessionOutcome.openAnnotations} carriedOver={sessionOutcome.carriedOver} />
+  }
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
