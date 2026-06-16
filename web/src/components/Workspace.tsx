@@ -46,6 +46,7 @@ export function Workspace(props: WorkspaceProps) {
         <div className="border-t" />
         <AnnotationList
           annotations={props.review.annotations}
+          stale={props.sourceState === "changed"}
           onOpen={props.onOpenAnnotation}
           onEdit={props.onEditAnnotation}
           onDelete={props.onDeleteAnnotation}

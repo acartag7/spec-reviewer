@@ -51,6 +51,39 @@ test("makes export warnings visible for drifted anchors", () => {
   expect(screen.getByRole("alert")).toHaveTextContent("Review anchors before copying export: 1 moved.")
 })
 
+test("groups prior-version notes into a Previous version bubble when the review is stale", () => {
+  render(
+    <AnnotationList
+      stale
+      annotations={[
+        annotation({ id: "current", anchorState: "ok", note: "Current note" }),
+        annotation({ id: "prior", anchorState: "not-found", note: "Prior note" }),
+      ]}
+      onOpen={vi.fn()}
+      onEdit={vi.fn()}
+      onDelete={vi.fn()}
+    />,
+  )
+
+  expect(screen.getByText("Previous version")).toBeInTheDocument()
+  expect(screen.getByText("Current note")).toBeInTheDocument()
+  expect(screen.getByText("Prior note")).toBeInTheDocument()
+})
+
+test("keeps not-found notes in the main list when the review is current", () => {
+  render(
+    <AnnotationList
+      annotations={[annotation({ id: "a1", anchorState: "not-found", note: "Still actionable" })]}
+      onOpen={vi.fn()}
+      onEdit={vi.fn()}
+      onDelete={vi.fn()}
+    />,
+  )
+
+  expect(screen.queryByText("Previous version")).not.toBeInTheDocument()
+  expect(screen.getByText("Still actionable")).toBeInTheDocument()
+})
+
 function annotation(overrides: Partial<Annotation> = {}): Annotation {
   return {
     id: "a1",
