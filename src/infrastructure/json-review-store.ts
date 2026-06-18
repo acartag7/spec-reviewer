@@ -14,7 +14,7 @@ export class JsonReviewStore implements ReviewStore {
   async load(documentPath: string): Promise<Review | null> {
     try {
       const raw = await readFile(this.filePath(documentPath), "utf8");
-      return JSON.parse(raw) as Review;
+      return ensureMetrics(JSON.parse(raw) as Review);
     } catch (error) {
       if (isNotFound(error)) return null;
       throw error;
@@ -25,7 +25,7 @@ export class JsonReviewStore implements ReviewStore {
     if (!/^[a-f0-9]{32}$/.test(id)) throw new Error("session id is invalid");
     try {
       const raw = await readFile(join(this.reviewDir(), `${id}.json`), "utf8");
-      return JSON.parse(raw) as Review;
+      return ensureMetrics(JSON.parse(raw) as Review);
     } catch (error) {
       if (isNotFound(error)) return null;
       throw error;
@@ -74,6 +74,7 @@ export class JsonReviewStore implements ReviewStore {
         annotations: review.annotations.length,
         openAnnotations: review.annotations.filter((item) => item.status === "open").length,
         updatedAt: review.updatedAt,
+        activeMs: review.metrics?.activeMs ?? 0,
       };
     } catch {
       return null;
@@ -83,4 +84,10 @@ export class JsonReviewStore implements ReviewStore {
 
 function isNotFound(error: unknown): boolean {
   return typeof error === "object" && error != null && "code" in error && error.code === "ENOENT";
+}
+
+// Old store files predate Review.metrics; default it on read so every consumer sees a well-formed
+// record. Shape validation stays the domain's job — this only fills a missing field.
+function ensureMetrics(review: Review): Review {
+  return review.metrics == null ? { ...review, metrics: { activeMs: 0 } } : review;
 }

@@ -11,6 +11,7 @@ export interface StoredReviewSummary {
   annotations: number;
   openAnnotations: number;
   updatedAt: string;
+  activeMs: number;
 }
 
 export interface RecentReview extends StoredReviewSummary {

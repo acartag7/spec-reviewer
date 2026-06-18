@@ -1,6 +1,7 @@
 import { sectionForLine } from "../domain/document.ts";
 import {
   createEmptyReview,
+  normalizeMetrics,
   normalizeReviewDraft,
   sourceTextForLines,
   withResolvedAnchors,
@@ -70,20 +71,34 @@ export class ReviewerService {
         }
         return sourceTextForLines(document, annotation.lineStart, annotation.lineEnd);
       },
+      previous,
     );
     if (previous != null) review.createdAt = previous.createdAt;
     await this.store.save(review);
     return withResolvedAnchors(document, review);
   }
 
-  async exportReview(path: string): Promise<{ markdown: string; openAnnotations: number; carriedOver: number }> {
+  async exportReview(path: string): Promise<{ markdown: string; openAnnotations: number; carriedOver: number; activeMs: number }> {
     const { document } = await this.reader.readMarkdown(path);
     const review = await this.store.load(document.path) ?? createEmptyReview(document.path, document.digest);
     const resolved = withResolvedAnchors(document, review);
     return {
       markdown: exportReviewMarkdown(document, resolved),
       ...reviewExportCounts(document, resolved),
+      activeMs: review.metrics?.activeMs ?? 0,
     };
+  }
+
+  // Accumulate active-reviewing time onto the stored review WITHOUT touching annotations,
+  // summary, or timestamps. Used by the finish/cancel flush path, whose request body carries
+  // only a delta (no draft). Returns null when no review is stored yet (nothing to accumulate onto).
+  async addActiveTime(path: string, delta: unknown): Promise<Review | null> {
+    const { document } = await this.reader.readMarkdown(path);
+    const stored = await this.store.load(document.path);
+    if (stored == null) return null;
+    const updated: Review = { ...stored, metrics: normalizeMetrics(stored.metrics, delta) };
+    await this.store.save(updated);
+    return withResolvedAnchors(document, updated);
   }
 
   async listRecentReviews(limit = 20): Promise<RecentReview[]> {
