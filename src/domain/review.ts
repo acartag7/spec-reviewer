@@ -31,6 +31,10 @@ export interface Annotation {
   anchor?: AnnotationAnchor | null;
 }
 
+export interface ReviewMetrics {
+  activeMs: number;
+}
+
 export interface Review {
   documentPath: string;
   documentDigest: string;
@@ -38,21 +42,45 @@ export interface Review {
   annotations: Annotation[];
   createdAt: string;
   updatedAt: string;
+  metrics: ReviewMetrics;
 }
 
 export interface ReviewDraft {
   path: string;
   summary?: unknown;
   annotations?: unknown;
+  activeMsDelta?: unknown;
 }
 
 const kinds = new Set<AnnotationKind>(["issue", "question", "suggestion", "decision", "note"]);
 const severities = new Set<AnnotationSeverity>(["blocker", "major", "minor", "note"]);
 const statuses = new Set<AnnotationStatus>(["open", "resolved"]);
 
+// One year of milliseconds. A single session cannot approach this; anything larger is
+// garbage or an overflow, so we clamp rather than persist it. Bounds concurrent-tab over-counting too.
+export const MAX_ACTIVE_MS = 1000 * 60 * 60 * 24 * 366;
+
 export function createEmptyReview(path: string, digest: string): Review {
   const now = new Date().toISOString();
-  return { documentPath: path, documentDigest: digest, summary: "", annotations: [], createdAt: now, updatedAt: now };
+  return { documentPath: path, documentDigest: digest, summary: "", annotations: [], createdAt: now, updatedAt: now, metrics: { activeMs: 0 } };
+}
+
+// Client-derived telemetry. Coerce, never throw: a bad value must not block a save (which
+// would lose the user's annotations) and must never overwrite the stored running total.
+export function normalizeActiveMsDelta(value: unknown): number {
+  if (value == null) return 0;
+  if (typeof value === "string" && value.trim() === "") return 0;
+  const n = typeof value === "string" ? Number(value) : value;
+  if (typeof n !== "number" || !Number.isFinite(n)) return 0;
+  if (n < 0) return 0;
+  if (n > MAX_ACTIVE_MS) return MAX_ACTIVE_MS;
+  return Math.floor(n);
+}
+
+export function normalizeMetrics(previous: ReviewMetrics | undefined, delta: unknown): ReviewMetrics {
+  const base = previous?.activeMs ?? 0;
+  const total = base + normalizeActiveMsDelta(delta);
+  return { activeMs: total > MAX_ACTIVE_MS ? MAX_ACTIVE_MS : total };
 }
 
 export function normalizeReviewDraft(
@@ -60,6 +88,7 @@ export function normalizeReviewDraft(
   digest: string,
   sectionLookup: (line: number) => string | null,
   anchorTextLookup: (annotation: Pick<Annotation, "id" | "lineStart" | "lineEnd">) => string | null = () => null,
+  previous: Review | null = null,
 ): Review {
   const now = new Date().toISOString();
   const annotations = Array.isArray(draft.annotations)
@@ -72,6 +101,7 @@ export function normalizeReviewDraft(
     annotations,
     createdAt: now,
     updatedAt: now,
+    metrics: normalizeMetrics(previous?.metrics, draft.activeMsDelta),
   };
 }
 
