@@ -1,6 +1,6 @@
 export type ReviewCompletion =
-  | { status: "finished"; path: string; markdown: string; openAnnotations: number; carriedOver: number }
-  | { status: "canceled"; path: string; reason: string | null };
+  | { status: "finished"; path: string; markdown: string; openAnnotations: number; carriedOver: number; activeMs: number }
+  | { status: "canceled"; path: string; reason: string | null; activeMs: number };
 
 export class ReviewSessionWaiter {
   private readonly waitPromise: Promise<ReviewCompletion>;
@@ -23,12 +23,12 @@ export class ReviewSessionWaiter {
     return this.waitPromise;
   }
 
-  finish(path: string, markdown: string, openAnnotations = 0, carriedOver = 0): ReviewCompletion {
-    return this.complete({ status: "finished", path, markdown, openAnnotations, carriedOver });
+  finish(path: string, markdown: string, openAnnotations = 0, carriedOver = 0, activeMs = 0): ReviewCompletion {
+    return this.complete({ status: "finished", path, markdown, openAnnotations, carriedOver, activeMs });
   }
 
-  cancel(path: string, reason: string | null): ReviewCompletion {
-    return this.complete({ status: "canceled", path, reason });
+  cancel(path: string, reason: string | null, activeMs = 0): ReviewCompletion {
+    return this.complete({ status: "canceled", path, reason, activeMs });
   }
 
   private complete(completion: ReviewCompletion): ReviewCompletion {

@@ -1,6 +1,7 @@
 import { sectionForLine } from "../domain/document.ts";
 import {
   createEmptyReview,
+  normalizeMetrics,
   normalizeReviewDraft,
   sourceTextForLines,
   withResolvedAnchors,
@@ -27,6 +28,26 @@ export class ReviewerService {
     this.store = store;
   }
 
+  private readonly locks = new Map<string, Promise<void>>();
+
+  // Serialize load→modify→save per document path. The JSON store has no atomicity, so without this an
+  // active-time flush (addActiveTime) racing a saveReview could load a stale snapshot and write it back,
+  // reverting the user's latest annotations — last write wins. Single-process local server, so an
+  // in-memory promise chain per path is sufficient; the entry self-cleans once the chain drains.
+  private synchronized<T>(path: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.locks.get(path) ?? Promise.resolve();
+    const result = previous.then(fn, fn);
+    const settled = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.locks.set(path, settled);
+    settled.finally(() => {
+      if (this.locks.get(path) === settled) this.locks.delete(path);
+    });
+    return result;
+  }
+
   async openDocument(path: string): Promise<OpenDocumentResult> {
     const { document } = await this.reader.readMarkdown(path);
     const stored = await this.store.load(document.path);
@@ -50,40 +71,58 @@ export class ReviewerService {
 
   async saveReview(draft: ReviewDraft): Promise<Review> {
     const { document } = await this.reader.readMarkdown(draft.path);
-    const previous = await this.store.load(document.path);
-    const previousAnchors = new Map(previous?.annotations.map((item) => [item.id, item]) ?? []);
-    const digest = previous != null && previous.documentDigest !== document.digest
-      ? previous.documentDigest
-      : document.digest;
-    const review = normalizeReviewDraft(
-      { ...draft, path: document.path },
-      digest,
-      (line) => sectionForLine(document, line),
-      (annotation) => {
-        const previousAnchor = previousAnchors.get(annotation.id);
-        if (
-          previousAnchor != null
-          && sameSavedRange(previousAnchor, annotation)
-          && previousAnchor.anchorText != null
-        ) {
-          return previousAnchor.anchorText;
-        }
-        return sourceTextForLines(document, annotation.lineStart, annotation.lineEnd);
-      },
-    );
-    if (previous != null) review.createdAt = previous.createdAt;
-    await this.store.save(review);
-    return withResolvedAnchors(document, review);
+    return this.synchronized(document.path, async () => {
+      const previous = await this.store.load(document.path);
+      const previousAnchors = new Map(previous?.annotations.map((item) => [item.id, item]) ?? []);
+      const digest = previous != null && previous.documentDigest !== document.digest
+        ? previous.documentDigest
+        : document.digest;
+      const review = normalizeReviewDraft(
+        { ...draft, path: document.path },
+        digest,
+        (line) => sectionForLine(document, line),
+        (annotation) => {
+          const previousAnchor = previousAnchors.get(annotation.id);
+          if (
+            previousAnchor != null
+            && sameSavedRange(previousAnchor, annotation)
+            && previousAnchor.anchorText != null
+          ) {
+            return previousAnchor.anchorText;
+          }
+          return sourceTextForLines(document, annotation.lineStart, annotation.lineEnd);
+        },
+        previous,
+      );
+      if (previous != null) review.createdAt = previous.createdAt;
+      await this.store.save(review);
+      return withResolvedAnchors(document, review);
+    });
   }
 
-  async exportReview(path: string): Promise<{ markdown: string; openAnnotations: number; carriedOver: number }> {
+  async exportReview(path: string): Promise<{ markdown: string; openAnnotations: number; carriedOver: number; activeMs: number }> {
     const { document } = await this.reader.readMarkdown(path);
     const review = await this.store.load(document.path) ?? createEmptyReview(document.path, document.digest);
     const resolved = withResolvedAnchors(document, review);
     return {
       markdown: exportReviewMarkdown(document, resolved),
       ...reviewExportCounts(document, resolved),
+      activeMs: review.metrics?.activeMs ?? 0,
     };
+  }
+
+  // Accumulate active-reviewing time WITHOUT touching annotations, summary, or timestamps. Used by the
+  // finish/cancel flush path and the passive /api/active-time flush, whose bodies carry only a delta.
+  // If no review is stored yet (a read-only session that never saved feedback), one is created so a
+  // reviewer who only reads and finishes still records their active time. Serialized per path.
+  async addActiveTime(path: string, delta: unknown): Promise<Review> {
+    const { document } = await this.reader.readMarkdown(path);
+    return this.synchronized(document.path, async () => {
+      const stored = await this.store.load(document.path) ?? createEmptyReview(document.path, document.digest);
+      const updated: Review = { ...stored, metrics: normalizeMetrics(stored.metrics, delta) };
+      await this.store.save(updated);
+      return withResolvedAnchors(document, updated);
+    });
   }
 
   async listRecentReviews(limit = 20): Promise<RecentReview[]> {

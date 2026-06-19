@@ -1,10 +1,12 @@
 import { useEffect } from "react"
 import { CheckCircle2, XCircle } from "lucide-react"
+import { formatActiveDuration } from "@/lib/utils"
 
 interface SessionOutcomeScreenProps {
   outcome: "finished" | "canceled"
   openAnnotations?: number
   carriedOver?: number
+  activeMs?: number
 }
 
 /**
@@ -16,7 +18,7 @@ interface SessionOutcomeScreenProps {
  * honor `window.close()` for script-opened windows, so when that is blocked the
  * message tells the user they can close it themselves.
  */
-export function SessionOutcomeScreen({ outcome, openAnnotations, carriedOver }: SessionOutcomeScreenProps) {
+export function SessionOutcomeScreen({ outcome, openAnnotations, carriedOver, activeMs }: SessionOutcomeScreenProps) {
   useEffect(() => {
     try {
       window.close()
@@ -38,9 +40,9 @@ export function SessionOutcomeScreen({ outcome, openAnnotations, carriedOver }: 
         <Icon className={`size-10 ${finished ? "text-emerald-500" : "text-muted-foreground"}`} />
         <h1 className="font-heading text-xl font-semibold">{title}</h1>
         <p className="text-sm text-muted-foreground">{body}</p>
-        {finished && (openAnnotations != null || carriedOver != null) ? (
+        {finished && (openAnnotations != null || carriedOver != null || activeMs != null) ? (
           <p className="font-mono text-xs text-muted-foreground">
-            {openAnnotations ?? 0} live · {carriedOver ?? 0} carried over
+            {openAnnotations ?? 0} live · {carriedOver ?? 0} carried over · {formatActiveDuration(activeMs ?? 0)} reviewing
           </p>
         ) : null}
       </div>

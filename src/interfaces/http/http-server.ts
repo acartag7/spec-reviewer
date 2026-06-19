@@ -73,14 +73,28 @@ async function routeApi(
     sendJson(res, 200, await service.exportReview(requirePath(url)));
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/active-time") {
+    // Lightweight passive flush (tab close / document switch) — accumulates a delta WITHOUT a
+    // draft, so it must NOT go through saveReview (which would wipe annotations). No wait session
+    // required; addActiveTime is a no-op when nothing is stored yet.
+    const action = readActiveTime(await readJson(req));
+    await service.addActiveTime(action.path, action.activeMsDelta);
+    sendJson(res, 200, { ok: true });
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/session/finish") {
     if (waitSession == null) {
       sendJson(res, 409, { error: { message: "No waiting review session" } });
       return;
     }
-    const { path } = readSessionAction(await readJson(req));
-    const exported = await service.exportReview(path);
-    sendJson(res, 200, waitSession.finish(path, exported.markdown, exported.openAnnotations, exported.carriedOver));
+    const action = readSessionAction(await readJson(req));
+    // Persist the final active-time delta before resolving. Guard on "waiting" so a second
+    // finish (idempotent complete()) does not double-persist. addActiveTime preserves annotations.
+    if (waitSession.status === "waiting" && action.activeMsDelta != null) {
+      await service.addActiveTime(action.path, action.activeMsDelta);
+    }
+    const exported = await service.exportReview(action.path);
+    sendJson(res, 200, waitSession.finish(action.path, exported.markdown, exported.openAnnotations, exported.carriedOver, exported.activeMs));
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/session/cancel") {
@@ -89,7 +103,11 @@ async function routeApi(
       return;
     }
     const action = readSessionAction(await readJson(req));
-    sendJson(res, 200, waitSession.cancel(action.path, action.reason));
+    if (waitSession.status === "waiting" && action.activeMsDelta != null) {
+      await service.addActiveTime(action.path, action.activeMsDelta);
+    }
+    const exported = await service.exportReview(action.path);
+    sendJson(res, 200, waitSession.cancel(action.path, action.reason, exported.activeMs));
     return;
   }
   sendJson(res, 404, { error: { message: "Not found" } });
@@ -101,7 +119,7 @@ function requirePath(url: URL): string {
   return path;
 }
 
-function readDraft(value: unknown): { path: string; summary?: unknown; annotations?: unknown } {
+function readDraft(value: unknown): { path: string; summary?: unknown; annotations?: unknown; activeMsDelta?: unknown } {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("request body must be an object");
   }
@@ -109,10 +127,10 @@ function readDraft(value: unknown): { path: string; summary?: unknown; annotatio
   if (typeof record.path !== "string" || record.path.trim() === "") {
     throw new Error("path is required");
   }
-  return { path: record.path, summary: record.summary, annotations: record.annotations };
+  return { path: record.path, summary: record.summary, annotations: record.annotations, activeMsDelta: record.activeMsDelta };
 }
 
-function readSessionAction(value: unknown): { path: string; reason: string | null } {
+function readSessionAction(value: unknown): { path: string; reason: string | null; activeMsDelta?: unknown } {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("request body must be an object");
   }
@@ -121,5 +139,16 @@ function readSessionAction(value: unknown): { path: string; reason: string | nul
     throw new Error("path is required");
   }
   const reason = typeof record.reason === "string" && record.reason.trim() !== "" ? record.reason.trim() : null;
-  return { path: record.path, reason };
+  return { path: record.path, reason, activeMsDelta: record.activeMsDelta };
+}
+
+function readActiveTime(value: unknown): { path: string; activeMsDelta: unknown } {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("request body must be an object");
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.path !== "string" || record.path.trim() === "") {
+    throw new Error("path is required");
+  }
+  return { path: record.path, activeMsDelta: record.activeMsDelta };
 }

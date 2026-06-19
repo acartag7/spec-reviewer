@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import type { RecentReview } from "@/api/types"
 import { shortDate, sourceStateLabel } from "@/lib/path-utils"
-import { cn } from "@/lib/utils"
+import { cn, formatActiveDuration } from "@/lib/utils"
 
 interface StartScreenProps {
   defaultPath: string
@@ -128,6 +128,7 @@ function RecentReviews({
           <span className="flex flex-wrap items-center gap-2 font-mono text-xs text-muted-foreground">
             <Badge variant="outline" className="capitalize">{sourceStateLabel(review.sourceState)}</Badge>
             {review.openAnnotations} open / {review.annotations} total
+            {review.activeMs > 0 ? <span>{formatActiveDuration(review.activeMs)}</span> : null}
             <span>{shortDate(review.updatedAt)}</span>
           </span>
         </button>

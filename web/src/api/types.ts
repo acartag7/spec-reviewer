@@ -44,6 +44,10 @@ export interface Annotation {
   anchor?: AnnotationAnchor | null
 }
 
+export interface ReviewMetrics {
+  activeMs: number
+}
+
 export interface Review {
   documentPath: string
   documentDigest: string
@@ -51,6 +55,7 @@ export interface Review {
   annotations: Annotation[]
   createdAt: string
   updatedAt: string
+  metrics: ReviewMetrics
 }
 
 export interface OpenDocumentResult {
@@ -68,6 +73,7 @@ export interface RecentReview {
   annotations: number
   openAnnotations: number
   updatedAt: string
+  activeMs: number
   sourceState: ReviewSourceState
   currentDigest: string | null
 }
@@ -82,8 +88,9 @@ export interface ReviewDraft {
   path: string
   summary: string
   annotations: Annotation[]
+  activeMsDelta?: number
 }
 
 export type ReviewCompletion =
-  | { status: "finished"; path: string; markdown: string; openAnnotations: number; carriedOver: number }
-  | { status: "canceled"; path: string; reason: string | null }
+  | { status: "finished"; path: string; markdown: string; openAnnotations: number; carriedOver: number; activeMs: number }
+  | { status: "canceled"; path: string; reason: string | null; activeMs: number }
