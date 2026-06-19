@@ -35,7 +35,7 @@ export function ReviewerPage() {
   }, [])
 
   const { flush: flushActiveTime } = useActiveReviewTime({
-    digest: document?.digest ?? null, path: document?.path ?? null,
+    path: document?.path ?? null,
     onAutoFlush: (delta, path) => { if (path != null) recordActiveTime(path, delta) },
   })
 

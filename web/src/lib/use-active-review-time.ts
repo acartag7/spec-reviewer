@@ -3,9 +3,8 @@ import { useCallback, useEffect, useRef } from "react"
 const ACCUMULATE_INTERVAL_MS = 1000
 
 interface UseActiveReviewTimeOptions {
-  digest: string | null
   path: string | null
-  /** Called with the captured delta and the path it was accumulated under, on digest change and
+  /** Called with the captured delta and the path it was accumulated under, on path change and
    *  beforeunload (the passive exit paths). The path is the one armed when the delta accrued, so a
    *  document switch attributes the prior delta to the prior document — not the newly opened one. */
   onAutoFlush?: (delta: number, path: string | null) => void
@@ -18,12 +17,11 @@ interface UseActiveReviewTimeOptions {
 // The caller owns transport: call flush() to snapshot the accumulated delta (it zeroes the
 // accumulator but KEEPS the run alive) and send it on autosave / finish / cancel. onAutoFlush covers
 // the passive exits (document switch, tab close), attributing the delta to the path open when it
-// accrued. START is idempotent per digest, so React <StrictMode> double-invocation does not double-count.
-export function useActiveReviewTime({ digest, path, onAutoFlush }: UseActiveReviewTimeOptions): { flush: () => number } {
+// accrued. START is idempotent per path, so React <StrictMode> double-invocation does not double-count.
+export function useActiveReviewTime({ path, onAutoFlush }: UseActiveReviewTimeOptions): { flush: () => number } {
   const accumulatedRef = useRef(0)
   const runStartRef = useRef<number | null>(null)
   const armedRef = useRef(false)
-  const startDigestRef = useRef<string | null>(null)
   const armedPathRef = useRef<string | null>(null)
   const onAutoFlushRef = useRef(onAutoFlush)
   onAutoFlushRef.current = onAutoFlush
@@ -93,25 +91,26 @@ export function useActiveReviewTime({ digest, path, onAutoFlush }: UseActiveRevi
     }
   }, [startRun, stopRun])
 
-  // Arm/disarm per digest (idempotent under StrictMode via startDigestRef). Switching documents
-  // auto-flushes the prior document's delta, attributed via armedPathRef — which still holds the
-  // prior path at flush time and is only updated to the new path afterwards.
+  // Arm/disarm per PATH. Reviews and metrics are stored per document path, so two documents with
+  // identical content (same digest) are still distinct runs — keying on digest would conflate them
+  // and misattribute time. Switching paths auto-flushes the prior path's delta, attributed via
+  // armedPathRef (which still holds the prior path at flush time). Idempotent under StrictMode.
   useEffect(() => {
-    if (digest == null) {
-      if (startDigestRef.current != null) autoFlush()
-      armedRef.current = false
-      runStartRef.current = null
-      startDigestRef.current = null
-      armedPathRef.current = null
+    if (path == null) {
+      if (armedPathRef.current != null) {
+        autoFlush()
+        armedRef.current = false
+        runStartRef.current = null
+        armedPathRef.current = null
+      }
       return
     }
-    if (startDigestRef.current === digest) return
-    if (startDigestRef.current != null) autoFlush()
-    startDigestRef.current = digest
+    if (armedPathRef.current === path) return
+    if (armedPathRef.current != null) autoFlush()
     armedPathRef.current = path
     armedRef.current = true
     if (isActive()) startRun()
-  }, [digest, path, autoFlush, isActive, startRun])
+  }, [path, autoFlush, isActive, startRun])
 
   // Tab close without finish: best-effort flush through the caller's onAutoFlush (keepalive fetch).
   useEffect(() => {
