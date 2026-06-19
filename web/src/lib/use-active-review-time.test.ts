@@ -20,7 +20,7 @@ test("accumulates while visible and focused", () => {
   vi.useFakeTimers()
   setVisible(true)
   setFocused(true)
-  const { result } = renderHook(() => useActiveReviewTime({ digest: "d1" }))
+  const { result } = renderHook(() => useActiveReviewTime({ digest: "d1", path: "/d1" }))
   act(() => { vi.advanceTimersByTime(3000) })
   let delta = -1
   act(() => { delta = result.current.flush() })
@@ -32,7 +32,7 @@ test("pauses when the tab is hidden", () => {
   vi.useFakeTimers()
   setVisible(true)
   setFocused(true)
-  const { result } = renderHook(() => useActiveReviewTime({ digest: "d1" }))
+  const { result } = renderHook(() => useActiveReviewTime({ digest: "d1", path: "/d1" }))
   act(() => { vi.advanceTimersByTime(2000) })
   setVisible(false)
   act(() => { document.dispatchEvent(new Event("visibilitychange")) })
@@ -50,7 +50,7 @@ test("pauses when the window blurs", () => {
   vi.useFakeTimers()
   setVisible(true)
   setFocused(true)
-  const { result } = renderHook(() => useActiveReviewTime({ digest: "d1" }))
+  const { result } = renderHook(() => useActiveReviewTime({ digest: "d1", path: "/d1" }))
   act(() => { vi.advanceTimersByTime(1000) })
   setFocused(false)
   act(() => { window.dispatchEvent(new Event("blur")) })
@@ -69,7 +69,7 @@ test("does not double-count under StrictMode", () => {
   setVisible(true)
   setFocused(true)
   const wrapper = ({ children }: { children: ReactNode }) => createElement(StrictMode, null, children)
-  const { result } = renderHook(() => useActiveReviewTime({ digest: "d1" }), { wrapper })
+  const { result } = renderHook(() => useActiveReviewTime({ digest: "d1", path: "/d1" }), { wrapper })
   act(() => { vi.advanceTimersByTime(3000) })
   let delta = -1
   act(() => { delta = result.current.flush() })
@@ -80,7 +80,7 @@ test("flush zeroes the accumulator", () => {
   vi.useFakeTimers()
   setVisible(true)
   setFocused(true)
-  const { result } = renderHook(() => useActiveReviewTime({ digest: "d1" }))
+  const { result } = renderHook(() => useActiveReviewTime({ digest: "d1", path: "/d1" }))
   act(() => { vi.advanceTimersByTime(1000) })
   act(() => { result.current.flush() })
   let second = -1
@@ -88,16 +88,39 @@ test("flush zeroes the accumulator", () => {
   expect(second).toBe(0)
 })
 
-test("digest change auto-flushes the prior document's delta", () => {
+// P1 regression: an autosave flush must not stop tracking. A reviewer who saves an annotation and
+// keeps reading must keep accumulating — otherwise nearly all active time after the first save is lost.
+test("keeps accumulating after a flush (autosave does not stop the run)", () => {
   vi.useFakeTimers()
   setVisible(true)
   setFocused(true)
-  let autoFlushed = 0
+  const { result } = renderHook(() => useActiveReviewTime({ digest: "d1", path: "/d1" }))
+  act(() => { vi.advanceTimersByTime(2000) })
+  let first = -1
+  act(() => { first = result.current.flush() })
+  expect(first).toBeGreaterThan(0)
+  act(() => { vi.advanceTimersByTime(2000) })
+  let second = -1
+  act(() => { second = result.current.flush() })
+  expect(second).toBeGreaterThan(0)
+})
+
+// P2 regression: on a document switch, the prior document's delta must be attributed to the prior
+// path, not the newly opened one (else switching between reviewed docs corrupts metrics).
+test("digest change attributes the prior delta to the prior path", () => {
+  vi.useFakeTimers()
+  setVisible(true)
+  setFocused(true)
+  const flushed: Array<{ delta: number; path: string | null }> = []
   const { rerender } = renderHook(
-    ({ digest }) => useActiveReviewTime({ digest, onAutoFlush: (d) => { autoFlushed += d } }),
-    { initialProps: { digest: "d1" as string | null } },
+    ({ digest, path }) => useActiveReviewTime({ digest, path, onAutoFlush: (delta, p) => flushed.push({ delta, path: p }) }),
+    { initialProps: { digest: "d1" as string | null, path: "/d1" as string | null } },
   )
   act(() => { vi.advanceTimersByTime(2000) })
-  act(() => { rerender({ digest: "d2" }) })
-  expect(autoFlushed).toBeGreaterThanOrEqual(1900)
+  act(() => { rerender({ digest: "d2", path: "/d2" }) })
+  expect(flushed).toHaveLength(1)
+  const prior = flushed[0]
+  if (prior == null) throw new Error("expected a flush entry")
+  expect(prior.path).toBe("/d1")
+  expect(prior.delta).toBeGreaterThan(0)
 })
