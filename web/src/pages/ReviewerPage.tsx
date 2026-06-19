@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "react-router-dom"
-import { api } from "@/api/client"
+import { api, recordActiveTime } from "@/api/client"
 import type { Annotation, OpenDocumentResult, Review, ReviewDocument, ReviewSourceState, SelectionRange } from "@/api/types"
 import { StartScreen } from "@/components/StartScreen"
 import { SessionOutcomeScreen } from "@/components/SessionOutcomeScreen"
@@ -11,6 +11,7 @@ import { Workspace } from "@/components/Workspace"
 import { createAnnotation, emptyForm, formFromAnnotation, removeAnnotation, upsertAnnotation } from "@/lib/review-utils"
 import type { AnnotationFormValue } from "@/lib/review-utils"
 import { isMarkdownFile } from "@/lib/path-utils"
+import { useActiveReviewTime } from "@/lib/use-active-review-time"
 
 const initialSelection: SelectionRange = { lineStart: 1, lineEnd: 1, selectedText: "" }
 
@@ -25,13 +26,18 @@ export function ReviewerPage() {
   const [form, setForm] = useState<AnnotationFormValue>(() => emptyForm(initialSelection))
   const [sourceState, setSourceState] = useState<ReviewSourceState>("unreviewed")
   const [status, setStatus] = useState("")
-  const [sessionOutcome, setSessionOutcome] = useState<{ outcome: "finished" | "canceled"; openAnnotations: number; carriedOver: number } | null>(null)
+  const [sessionOutcome, setSessionOutcome] = useState<{ outcome: "finished" | "canceled"; openAnnotations: number; carriedOver: number; activeMs: number } | null>(null)
 
   const showStatus = useCallback((message: string) => {
     setStatus(message)
     if (timeoutRef.current != null) window.clearTimeout(timeoutRef.current)
     timeoutRef.current = window.setTimeout(() => setStatus(""), 1800)
   }, [])
+
+  const { flush: flushActiveTime } = useActiveReviewTime({
+    digest: document?.digest ?? null,
+    onAutoFlush: (delta) => { if (document != null) recordActiveTime(document.path, delta) },
+  })
 
   const configQuery = useQuery({ queryKey: ["config"], queryFn: api.config })
   const reviewsQuery = useQuery({ queryKey: ["reviews"], queryFn: api.recentReviews })
@@ -80,6 +86,7 @@ export function ReviewerPage() {
         path: document.path,
         summary: nextReview.summary,
         annotations: nextReview.annotations,
+        activeMsDelta: flushActiveTime(),
       })
     },
     onSuccess: (saved) => {
@@ -107,23 +114,23 @@ export function ReviewerPage() {
   })
 
   const finishMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: (activeMsDelta: number) => {
       if (document == null) throw new Error("Open a document first")
-      return api.finishReview(document.path)
+      return api.finishReview(document.path, activeMsDelta)
     },
     onSuccess: (completion) => {
-      if (completion.status === "finished") setSessionOutcome({ outcome: "finished", openAnnotations: completion.openAnnotations, carriedOver: completion.carriedOver })
+      if (completion.status === "finished") setSessionOutcome({ outcome: "finished", openAnnotations: completion.openAnnotations, carriedOver: completion.carriedOver, activeMs: completion.activeMs })
     },
     onError: (error) => showStatus(error instanceof Error ? error.message : String(error)),
   })
 
   const cancelMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: (activeMsDelta: number) => {
       if (document == null) throw new Error("Open a document first")
-      return api.cancelReview(document.path)
+      return api.cancelReview(document.path, activeMsDelta)
     },
     onSuccess: (completion) => {
-      if (completion.status === "canceled") setSessionOutcome({ outcome: "canceled", openAnnotations: 0, carriedOver: 0 })
+      if (completion.status === "canceled") setSessionOutcome({ outcome: "canceled", openAnnotations: 0, carriedOver: 0, activeMs: completion.activeMs })
     },
     onError: (error) => showStatus(error instanceof Error ? error.message : String(error)),
   })
@@ -181,7 +188,7 @@ export function ReviewerPage() {
   const finishing = finishMutation.isPending || cancelMutation.isPending
 
   if (sessionOutcome != null) {
-    return <SessionOutcomeScreen outcome={sessionOutcome.outcome} openAnnotations={sessionOutcome.openAnnotations} carriedOver={sessionOutcome.carriedOver} />
+    return <SessionOutcomeScreen outcome={sessionOutcome.outcome} openAnnotations={sessionOutcome.openAnnotations} carriedOver={sessionOutcome.carriedOver} activeMs={sessionOutcome.activeMs} />
   }
 
   return (
@@ -193,8 +200,8 @@ export function ReviewerPage() {
         waitForReview={configQuery.data?.waitForReview ?? false}
         finishing={finishing}
         onCopy={copyExport}
-        onFinish={() => finishMutation.mutate()}
-        onCancel={() => cancelMutation.mutate()}
+        onFinish={() => finishMutation.mutate(flushActiveTime())}
+        onCancel={() => cancelMutation.mutate(flushActiveTime())}
       />
       {document != null && review != null ? (
         <Workspace

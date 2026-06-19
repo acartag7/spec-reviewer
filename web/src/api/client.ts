@@ -29,6 +29,18 @@ export const api = {
     const encoded = encodeURIComponent(path)
     return request<{ markdown: string }>("GET", `/api/export?path=${encoded}`)
   },
-  finishReview: (path: string) => request<ReviewCompletion>("POST", "/api/session/finish", { path }),
-  cancelReview: (path: string) => request<ReviewCompletion>("POST", "/api/session/cancel", { path }),
+  finishReview: (path: string, activeMsDelta = 0) => request<ReviewCompletion>("POST", "/api/session/finish", { path, activeMsDelta }),
+  cancelReview: (path: string, activeMsDelta = 0) => request<ReviewCompletion>("POST", "/api/session/cancel", { path, activeMsDelta }),
+}
+
+// Fire-and-forget keepalive POST of an active-time delta for the passive flush paths (tab close /
+// document switch) where no other request is in flight. keepalive lets it survive page teardown.
+export function recordActiveTime(path: string, activeMsDelta: number): void {
+  if (activeMsDelta <= 0) return
+  void fetch("/api/active-time", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path, activeMsDelta }),
+    keepalive: true,
+  }).catch(() => {})
 }
