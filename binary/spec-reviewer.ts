@@ -101,16 +101,28 @@ async function routeApi(
   if (request.method === "GET" && url.pathname === "/api/export") {
     return json(await service.exportReview(requirePath(url)));
   }
+  if (request.method === "POST" && url.pathname === "/api/active-time") {
+    const action = readActiveTime(await readJson(request));
+    await service.addActiveTime(action.path, action.activeMsDelta);
+    return json({ ok: true });
+  }
   if (request.method === "POST" && url.pathname === "/api/session/finish") {
     if (waitSession == null) return json({ error: { message: "No waiting review session" } }, 409);
-    const { path } = readSessionAction(await readJson(request));
-    const exported = await service.exportReview(path);
-    return json(waitSession.finish(path, exported.markdown, exported.openAnnotations, exported.carriedOver));
+    const action = readSessionAction(await readJson(request));
+    if (waitSession.status === "waiting" && action.activeMsDelta != null) {
+      await service.addActiveTime(action.path, action.activeMsDelta);
+    }
+    const exported = await service.exportReview(action.path);
+    return json(waitSession.finish(action.path, exported.markdown, exported.openAnnotations, exported.carriedOver, exported.activeMs));
   }
   if (request.method === "POST" && url.pathname === "/api/session/cancel") {
     if (waitSession == null) return json({ error: { message: "No waiting review session" } }, 409);
     const action = readSessionAction(await readJson(request));
-    return json(waitSession.cancel(action.path, action.reason));
+    if (waitSession.status === "waiting" && action.activeMsDelta != null) {
+      await service.addActiveTime(action.path, action.activeMsDelta);
+    }
+    const exported = await service.exportReview(action.path);
+    return json(waitSession.cancel(action.path, action.reason, exported.activeMs));
   }
   return json({ error: { message: "Not found" } }, 404);
 }
@@ -129,19 +141,19 @@ async function readJson(request: Request): Promise<unknown> {
   return raw.trim() === "" ? {} : JSON.parse(raw);
 }
 
-function readDraft(value: unknown): { path: string; summary?: unknown; annotations?: unknown } {
+function readDraft(value: unknown): { path: string; summary?: unknown; annotations?: unknown; activeMsDelta?: unknown } {
   if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("request body must be an object");
   const record = value as Record<string, unknown>;
   if (typeof record.path !== "string" || record.path.trim() === "") throw new Error("path is required");
-  return { path: record.path, summary: record.summary, annotations: record.annotations };
+  return { path: record.path, summary: record.summary, annotations: record.annotations, activeMsDelta: record.activeMsDelta };
 }
 
-function readSessionAction(value: unknown): { path: string; reason: string | null } {
+function readSessionAction(value: unknown): { path: string; reason: string | null; activeMsDelta?: unknown } {
   if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("request body must be an object");
   const record = value as Record<string, unknown>;
   if (typeof record.path !== "string" || record.path.trim() === "") throw new Error("path is required");
   const reason = typeof record.reason === "string" && record.reason.trim() !== "" ? record.reason.trim() : null;
-  return { path: record.path, reason };
+  return { path: record.path, reason, activeMsDelta: record.activeMsDelta };
 }
 
 function requirePath(url: URL): string {
@@ -220,7 +232,7 @@ async function printSessions(config: AppConfig, service: ReturnType<typeof creat
     return 0;
   }
   for (const session of sessions) {
-    console.log(`${session.id}  ${session.updatedAt}  ${session.sourceState}  ${session.openAnnotations}/${session.annotations}  ${session.documentPath}`);
+    console.log(`${session.id}  ${session.updatedAt}  ${session.sourceState}  ${session.openAnnotations}/${session.annotations}  ${formatMs(session.activeMs)}  ${session.documentPath}`);
   }
   return 0;
 }
@@ -243,6 +255,24 @@ function errorPayload(error: unknown): { error: { message: string } } {
 function errorStatus(error: unknown): number {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes("not found") || message.includes("ENOENT") ? 404 : 400;
+}
+
+function readActiveTime(value: unknown): { path: string; activeMsDelta: unknown } {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("request body must be an object");
+  const record = value as Record<string, unknown>;
+  if (typeof record.path !== "string" || record.path.trim() === "") throw new Error("path is required");
+  return { path: record.path, activeMsDelta: record.activeMsDelta };
+}
+
+function formatMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "0s";
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return `${minutes}m${seconds}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h${minutes % 60}m`;
 }
 
 main().then((code) => {
