@@ -25,6 +25,7 @@ export const api = {
     return request<OpenDocumentResult>("POST", "/api/document-upload", file)
   },
   saveReview: (review: ReviewDraft) => request<Review>("POST", "/api/review", review),
+  confirmCurrentVersion: (path: string) => request<Review>("POST", "/api/review/baseline", { path }),
   exportReview: (path: string) => {
     const encoded = encodeURIComponent(path)
     return request<{ markdown: string }>("GET", `/api/export?path=${encoded}`)

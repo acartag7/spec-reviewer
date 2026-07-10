@@ -3,8 +3,10 @@ import { loadConfig, type AppConfig } from "../src/config.ts";
 import { createReviewerService } from "../src/application/app-factory.ts";
 import { ReviewSessionWaiter, type ReviewCompletion } from "../src/application/review-session.ts";
 import { secureHeaders } from "../src/interfaces/http/security.ts";
+import { readActiveTime, readPathAction, readReviewDraft, readSessionAction } from "../src/interfaces/http/actions.ts";
 import { readUpload, storeUploadedMarkdown } from "../src/interfaces/http/uploads.ts";
 import { openUrl } from "../src/cli/open-url.ts";
+import { printCompletion, printSessions, reviewUrl, writeStartup } from "../src/cli/output.ts";
 import { runSkillCommand } from "../src/cli/skill-installer.ts";
 
 const maxJsonBytes = 3 * 1024 * 1024;
@@ -96,7 +98,10 @@ async function routeApi(
     return json(await service.openDocument(path));
   }
   if (request.method === "POST" && url.pathname === "/api/review") {
-    return json(await service.saveReview(readDraft(await readJson(request))));
+    return json(await service.saveReview(readReviewDraft(await readJson(request))));
+  }
+  if (request.method === "POST" && url.pathname === "/api/review/baseline") {
+    return json(await service.confirmCurrentVersion(readPathAction(await readJson(request)).path));
   }
   if (request.method === "GET" && url.pathname === "/api/export") {
     return json(await service.exportReview(requirePath(url)));
@@ -109,6 +114,7 @@ async function routeApi(
   if (request.method === "POST" && url.pathname === "/api/session/finish") {
     if (waitSession == null) return json({ error: { message: "No waiting review session" } }, 409);
     const action = readSessionAction(await readJson(request));
+    waitSession.assertPath(action.path);
     if (waitSession.status === "waiting" && action.activeMsDelta != null) {
       await service.addActiveTime(action.path, action.activeMsDelta);
     }
@@ -118,6 +124,7 @@ async function routeApi(
   if (request.method === "POST" && url.pathname === "/api/session/cancel") {
     if (waitSession == null) return json({ error: { message: "No waiting review session" } }, 409);
     const action = readSessionAction(await readJson(request));
+    waitSession.assertPath(action.path);
     if (waitSession.status === "waiting" && action.activeMsDelta != null) {
       await service.addActiveTime(action.path, action.activeMsDelta);
     }
@@ -139,21 +146,6 @@ async function readJson(request: Request): Promise<unknown> {
   const raw = await request.text();
   if (Buffer.byteLength(raw, "utf8") > maxJsonBytes) throw new Error("JSON body is too large");
   return raw.trim() === "" ? {} : JSON.parse(raw);
-}
-
-function readDraft(value: unknown): { path: string; summary?: unknown; annotations?: unknown; activeMsDelta?: unknown } {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("request body must be an object");
-  const record = value as Record<string, unknown>;
-  if (typeof record.path !== "string" || record.path.trim() === "") throw new Error("path is required");
-  return { path: record.path, summary: record.summary, annotations: record.annotations, activeMsDelta: record.activeMsDelta };
-}
-
-function readSessionAction(value: unknown): { path: string; reason: string | null; activeMsDelta?: unknown } {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("request body must be an object");
-  const record = value as Record<string, unknown>;
-  if (typeof record.path !== "string" || record.path.trim() === "") throw new Error("path is required");
-  const reason = typeof record.reason === "string" && record.reason.trim() !== "" ? record.reason.trim() : null;
-  return { path: record.path, reason, activeMsDelta: record.activeMsDelta };
 }
 
 function requirePath(url: URL): string {
@@ -206,48 +198,6 @@ function isAssetPath(pathname: string): boolean {
   return /\.[a-z0-9]+$/i.test(pathname);
 }
 
-function reviewUrl(config: AppConfig, port: number): string {
-  const base = `http://${config.host}:${port}`;
-  if (config.defaultDocumentPath == null) return base;
-  return `${base}/?path=${encodeURIComponent(config.defaultDocumentPath)}`;
-}
-
-function writeStartup(config: AppConfig, url: string): void {
-  const out = config.jsonOutput && config.waitForReview ? process.stderr : process.stdout;
-  if (config.jsonOutput && !config.waitForReview) {
-    out.write(`${JSON.stringify({ url, path: config.defaultDocumentPath })}\n`);
-    return;
-  }
-  out.write(`Spec Reviewer running at ${url}\n`);
-}
-
-async function printSessions(config: AppConfig, service: ReturnType<typeof createReviewerService>): Promise<number> {
-  const sessions = await service.listRecentReviews();
-  if (config.jsonOutput) {
-    console.log(JSON.stringify({ sessions }, null, 2));
-    return 0;
-  }
-  if (sessions.length === 0) {
-    console.log("No saved reviews.");
-    return 0;
-  }
-  for (const session of sessions) {
-    console.log(`${session.id}  ${session.updatedAt}  ${session.sourceState}  ${session.openAnnotations}/${session.annotations}  ${formatMs(session.activeMs)}  ${session.documentPath}`);
-  }
-  return 0;
-}
-
-function printCompletion(config: AppConfig, completion: ReviewCompletion): number {
-  if (completion.status === "canceled") {
-    if (config.jsonOutput) console.log(JSON.stringify(completion));
-    else console.error("Review canceled");
-    return 1;
-  }
-  if (config.jsonOutput) console.log(JSON.stringify(completion));
-  else console.log(completion.markdown);
-  return 0;
-}
-
 function errorPayload(error: unknown): { error: { message: string } } {
   return { error: { message: error instanceof Error ? error.message : String(error) } };
 }
@@ -255,24 +205,6 @@ function errorPayload(error: unknown): { error: { message: string } } {
 function errorStatus(error: unknown): number {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes("not found") || message.includes("ENOENT") ? 404 : 400;
-}
-
-function readActiveTime(value: unknown): { path: string; activeMsDelta: unknown } {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("request body must be an object");
-  const record = value as Record<string, unknown>;
-  if (typeof record.path !== "string" || record.path.trim() === "") throw new Error("path is required");
-  return { path: record.path, activeMsDelta: record.activeMsDelta };
-}
-
-function formatMs(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return "0s";
-  const totalSeconds = Math.round(ms / 1000);
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes < 60) return `${minutes}m${seconds}s`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h${minutes % 60}m`;
 }
 
 main().then((code) => {

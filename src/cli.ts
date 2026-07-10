@@ -6,6 +6,7 @@ import { createReviewerService } from "./application/app-factory.ts";
 import { ReviewSessionWaiter, type ReviewCompletion } from "./application/review-session.ts";
 import { createHttpServer } from "./interfaces/http/http-server.ts";
 import { openUrl } from "./cli/open-url.ts";
+import { printCompletion, printSessions, reviewUrl, writeStartup } from "./cli/output.ts";
 import { runSkillCommand } from "./cli/skill-installer.ts";
 
 export async function runCli(argv = process.argv.slice(2), env = process.env): Promise<number> {
@@ -44,64 +45,4 @@ export async function runCli(argv = process.argv.slice(2), env = process.env): P
 function serverPort(address: string | AddressInfo | null): number {
   if (address == null || typeof address === "string") throw new Error("Server did not expose a TCP port");
   return address.port;
-}
-
-function reviewUrl(config: AppConfig, port: number): string {
-  const base = `http://${config.host}:${port}`;
-  if (config.defaultDocumentPath == null) return base;
-  return `${base}/?path=${encodeURIComponent(config.defaultDocumentPath)}`;
-}
-
-function writeStartup(config: AppConfig, url: string): void {
-  const out = config.jsonOutput && config.waitForReview ? process.stderr : process.stdout;
-  if (config.jsonOutput && !config.waitForReview) {
-    out.write(`${JSON.stringify({ url, path: config.defaultDocumentPath })}\n`);
-    return;
-  }
-  out.write(`Spec Reviewer running at ${url}\n`);
-  if (config.defaultDocumentPath != null) out.write(`Default document: ${config.defaultDocumentPath}\n`);
-}
-
-async function printSessions(
-  config: AppConfig,
-  service: ReturnType<typeof createReviewerService>,
-): Promise<number> {
-  const sessions = await service.listRecentReviews();
-  if (config.jsonOutput) {
-    console.log(JSON.stringify({ sessions }, null, 2));
-    return 0;
-  }
-  if (sessions.length === 0) {
-    console.log("No saved reviews.");
-    return 0;
-  }
-  for (const session of sessions) {
-    console.log(`${session.id}  ${session.updatedAt}  ${session.sourceState}  ${session.openAnnotations}/${session.annotations}  ${formatMs(session.activeMs)}  ${session.documentPath}`);
-  }
-  return 0;
-}
-
-function formatMs(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return "0s"
-  const totalSeconds = Math.round(ms / 1000)
-  if (totalSeconds < 60) return `${totalSeconds}s`
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  if (minutes < 60) return `${minutes}m${seconds}s`
-  const hours = Math.floor(minutes / 60)
-  return `${hours}h${minutes % 60}m`
-}
-
-function printCompletion(config: AppConfig, completion: ReviewCompletion): number {
-  if (completion.status === "canceled") {
-    if (config.jsonOutput) console.log(JSON.stringify(completion));
-    else console.error("Review canceled");
-    return 1;
-  }
-  if (config.jsonOutput) {
-    console.log(JSON.stringify(completion));
-  } else {
-    console.log(completion.markdown);
-  }
-  return 0;
 }

@@ -1,8 +1,6 @@
 import type { Annotation, Review, ReviewDocument, ReviewSourceState, SelectionRange } from "@/api/types"
-import { AgentExport } from "@/components/AgentExport"
-import { AnnotationList } from "@/components/AnnotationList"
-import { AnnotationPanel } from "@/components/AnnotationPanel"
 import { ReaderPane } from "@/components/ReaderPane"
+import { ReviewSidebar } from "@/components/ReviewSidebar"
 import type { AnnotationFormValue } from "@/lib/review-utils"
 
 interface WorkspaceProps {
@@ -11,22 +9,28 @@ interface WorkspaceProps {
   selection: SelectionRange
   sourceState: ReviewSourceState
   form: AnnotationFormValue
+  summaryDraft: string
   exportMarkdown: string
   exportLoading: boolean
   saving: boolean
+  confirming: boolean
   onSelection: (selection: SelectionRange) => void
   onFormChange: (form: AnnotationFormValue) => void
   onFormSubmit: () => void
   onFormReset: () => void
+  onSummaryChange: (summary: string) => void
+  onSummarySave: () => void
   onOpenAnnotation: (annotation: Annotation) => void
   onEditAnnotation: (annotation: Annotation) => void
   onDeleteAnnotation: (annotation: Annotation) => void
+  onStatusChange: (annotation: Annotation, status: Annotation["status"]) => void
+  onConfirmCurrent: () => void
   onCopyExport: () => void
 }
 
 export function Workspace(props: WorkspaceProps) {
   return (
-    <main className="grid h-[calc(100dvh-3.5rem)] min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_390px]">
+    <main className="grid min-h-[calc(100dvh-4rem)] grid-cols-1 bg-muted/30 lg:h-[calc(100dvh-4rem)] lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_420px]">
       <ReaderPane
         document={props.document}
         review={props.review}
@@ -34,31 +38,29 @@ export function Workspace(props: WorkspaceProps) {
         sourceState={props.sourceState}
         onSelect={props.onSelection}
       />
-      <aside className="review-scroll grid min-h-0 gap-5 overflow-auto border-t bg-card p-4 lg:border-l lg:border-t-0">
-        <AnnotationPanel
-          form={props.form}
-          selection={props.selection}
-          saving={props.saving}
-          onChange={props.onFormChange}
-          onSubmit={props.onFormSubmit}
-          onReset={props.onFormReset}
-        />
-        <div className="border-t" />
-        <AnnotationList
-          annotations={props.review.annotations}
-          stale={props.sourceState === "changed"}
-          onOpen={props.onOpenAnnotation}
-          onEdit={props.onEditAnnotation}
-          onDelete={props.onDeleteAnnotation}
-        />
-        <div className="border-t" />
-        <AgentExport
-          markdown={props.exportMarkdown}
-          loading={props.exportLoading}
-          annotations={props.review.annotations}
-          onCopy={props.onCopyExport}
-        />
-      </aside>
+      <ReviewSidebar
+        document={props.document}
+        review={props.review}
+        selection={props.selection}
+        sourceState={props.sourceState}
+        form={props.form}
+        summaryDraft={props.summaryDraft}
+        exportMarkdown={props.exportMarkdown}
+        exportLoading={props.exportLoading}
+        saving={props.saving}
+        confirming={props.confirming}
+        onFormChange={props.onFormChange}
+        onFormSubmit={props.onFormSubmit}
+        onFormReset={props.onFormReset}
+        onSummaryChange={props.onSummaryChange}
+        onSummarySave={props.onSummarySave}
+        onOpenAnnotation={props.onOpenAnnotation}
+        onEditAnnotation={props.onEditAnnotation}
+        onDeleteAnnotation={props.onDeleteAnnotation}
+        onStatusChange={props.onStatusChange}
+        onConfirmCurrent={props.onConfirmCurrent}
+        onCopyExport={props.onCopyExport}
+      />
     </main>
   )
 }

@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@import "./shadcn.css";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/jetbrains-mono";
 @import "./artifact.css";
@@ -60,6 +60,7 @@
   body {
     @apply bg-background text-foreground antialiased;
     margin: 0;
+    min-width: 320px;
   }
 
   button,
@@ -72,6 +73,19 @@
 .review-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
 .review-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
 .review-scroll::-webkit-scrollbar-thumb:hover { background: var(--input); }
+
+.document-paper {
+  background-image: linear-gradient(to bottom, color-mix(in srgb, var(--card) 96%, var(--primary) 4%), var(--card));
+}
+
+.annotation-card {
+  border-left-width: 3px;
+  border-left-color: var(--sev-note);
+}
+
+.annotation-card[data-severity="blocker"] { border-left-color: var(--sev-blocker); }
+.annotation-card[data-severity="major"] { border-left-color: var(--sev-major); }
+.annotation-card[data-severity="minor"] { border-left-color: var(--sev-minor); }
 
 .markdown-body {
   max-width: 760px;
@@ -91,11 +105,11 @@
 
 .markdown-block:hover,
 .markdown-block.selected {
-  background: var(--muted);
+  background: color-mix(in srgb, var(--accent) 74%, transparent);
 }
 
 .markdown-block.selected {
-  box-shadow: inset 0 0 0 1px var(--border);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 45%, var(--border));
 }
 
 .markdown-block[data-severity]::before {

@@ -19,6 +19,7 @@ interface SessionOutcomeScreenProps {
  * message tells the user they can close it themselves.
  */
 export function SessionOutcomeScreen({ outcome, openAnnotations, carriedOver, activeMs }: SessionOutcomeScreenProps) {
+  void carriedOver
   useEffect(() => {
     try {
       window.close()
@@ -40,9 +41,9 @@ export function SessionOutcomeScreen({ outcome, openAnnotations, carriedOver, ac
         <Icon className={`size-10 ${finished ? "text-emerald-500" : "text-muted-foreground"}`} />
         <h1 className="font-heading text-xl font-semibold">{title}</h1>
         <p className="text-sm text-muted-foreground">{body}</p>
-        {finished && (openAnnotations != null || carriedOver != null || activeMs != null) ? (
+        {finished && (openAnnotations != null || activeMs != null) ? (
           <p className="font-mono text-xs text-muted-foreground">
-            {openAnnotations ?? 0} live · {carriedOver ?? 0} carried over · {formatActiveDuration(activeMs ?? 0)} reviewing
+            {openAnnotations ?? 0} open notes · {formatActiveDuration(activeMs ?? 0)} reviewing
           </p>
         ) : null}
       </div>

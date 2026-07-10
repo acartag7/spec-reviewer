@@ -20,6 +20,7 @@ export interface RecentReview extends StoredReviewSummary {
 }
 
 export interface DocumentReader {
+  resolvePath(path: string): string;
   readMarkdown(path: string): Promise<{ document: ReviewDocument; content: string }>;
 }
 

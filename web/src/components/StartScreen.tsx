@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { FolderOpen, Upload } from "lucide-react"
+import { ArrowRight, FileCheck2, FolderOpen, LockKeyhole, Upload } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,11 +32,12 @@ export function StartScreen({
   }, [defaultPath, path])
 
   return (
-    <main className="grid min-h-[calc(100dvh-3.5rem)] gap-5 p-5 lg:grid-cols-[minmax(340px,1.2fr)_minmax(280px,0.8fr)] lg:p-10">
+    <main className="mx-auto grid min-h-[calc(100dvh-4rem)] w-full max-w-7xl gap-6 p-5 lg:grid-cols-[minmax(420px,1.15fr)_minmax(320px,0.85fr)] lg:p-10 xl:p-14">
       <section
         className={cn(
-          "flex min-h-80 flex-col justify-center gap-5 rounded-lg border border-dashed bg-card p-8",
-          dragging && "border-primary bg-muted",
+          "relative flex min-h-[30rem] flex-col justify-center gap-6 overflow-hidden rounded-3xl border bg-card p-7 shadow-sm sm:p-10",
+          "before:absolute before:-right-20 before:-top-24 before:size-72 before:rounded-full before:bg-primary/10 before:blur-3xl",
+          dragging && "border-primary bg-accent shadow-md",
         )}
         onDragOver={(event) => {
           event.preventDefault()
@@ -50,12 +51,24 @@ export function StartScreen({
           if (file != null) onOpenFile(file)
         }}
       >
-        <div className="grid gap-2">
-          <h1 className="font-heading text-3xl font-semibold tracking-normal">Review a Markdown spec</h1>
-          <p className="text-sm text-muted-foreground">Drop a `.md` file here or open a local Markdown path.</p>
+        <div className="relative grid gap-4">
+          <span className="grid size-11 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+            <FileCheck2 className="size-5" />
+          </span>
+          <div className="grid gap-2">
+            <h1 className="max-w-xl font-heading text-3xl font-semibold tracking-tight sm:text-4xl">Review a Markdown spec</h1>
+            <p className="max-w-lg text-sm leading-6 text-muted-foreground">
+              Read the rendered document, anchor feedback to source lines, and return one clean handoff to the agent.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <span className="rounded-full border bg-background px-2.5 py-1">Local only</span>
+            <span className="rounded-full border bg-background px-2.5 py-1">Source anchored</span>
+            <span className="rounded-full border bg-background px-2.5 py-1">Agent ready</span>
+          </div>
         </div>
         <form
-          className="flex flex-col gap-2 sm:flex-row"
+          className="relative flex flex-col gap-2 rounded-2xl border bg-background p-2 shadow-sm sm:flex-row"
           onSubmit={(event) => {
             event.preventDefault()
             onOpenPath(path.trim())
@@ -64,16 +77,18 @@ export function StartScreen({
           <Input
             value={path}
             onChange={(event) => setPath(event.target.value)}
-            placeholder="~/project/.../README.md"
+            className="h-10 border-0 bg-transparent shadow-none focus-visible:ring-0"
+            placeholder="~/project/specs/plan.md"
             autoComplete="off"
           />
-          <Button type="submit">
+          <Button type="submit" size="lg">
             <FolderOpen />
             Open path
+            <ArrowRight />
           </Button>
         </form>
-        <div>
-          <Button type="button" variant="outline" asChild>
+        <div className="relative flex items-center justify-between gap-3">
+          <Button type="button" variant="ghost" asChild>
             <label>
               <Upload />
               Choose Markdown file
@@ -90,11 +105,12 @@ export function StartScreen({
               />
             </label>
           </Button>
+          <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex"><LockKeyhole className="size-3.5" /> Files stay on this machine</span>
         </div>
       </section>
-      <Card className="min-h-80 rounded-lg">
+      <Card className="min-h-80 rounded-3xl shadow-sm">
         <CardHeader>
-          <CardTitle>Recent Reviews</CardTitle>
+          <CardTitle className="flex items-center justify-between">Recent reviews <Badge variant="secondary">{reviews.length}</Badge></CardTitle>
         </CardHeader>
         <CardContent>
           <RecentReviews reviews={reviews} loading={loadingReviews} onOpenPath={onOpenPath} />
@@ -121,10 +137,10 @@ function RecentReviews({
         <button
           key={review.documentPath}
           type="button"
-          className="grid gap-1 rounded-lg border bg-background p-3 text-left hover:bg-muted"
+          className="group grid gap-2 rounded-xl border bg-background p-3 text-left transition hover:-translate-y-px hover:border-primary/30 hover:shadow-sm"
           onClick={() => onOpenPath(review.documentPath)}
         >
-          <span className="font-medium">{review.title}</span>
+          <span className="flex items-center justify-between gap-3 font-medium">{review.title}<ArrowRight className="size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" /></span>
           <span className="flex flex-wrap items-center gap-2 font-mono text-xs text-muted-foreground">
             <Badge variant="outline" className="capitalize">{sourceStateLabel(review.sourceState)}</Badge>
             {review.openAnnotations} open / {review.annotations} total

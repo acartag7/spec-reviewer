@@ -57,6 +57,7 @@ async function smokeServer() {
 async function smokeWaitWorkflow() {
   const port = await freePort();
   const doc = writeFixture("wait.md");
+  const otherDoc = writeFixture("other.md");
   const child = spawn(binary, [
     "review",
     "--wait",
@@ -79,6 +80,14 @@ async function smokeWaitWorkflow() {
       annotations: [{ lineStart: 3, lineEnd: 3, kind: "issue", severity: "major", note: "Fix smoke note" }],
     }),
   });
+  const wrongFinish = await fetch(`${base}/api/session/finish`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path: otherDoc }),
+  });
+  if (wrongFinish.status !== 400 || child.exitCode != null) {
+    throw new Error("Wait workflow accepted completion for the wrong document");
+  }
   await jsonFetch(`${base}/api/session/finish`, {
     method: "POST",
     headers: { "content-type": "application/json" },

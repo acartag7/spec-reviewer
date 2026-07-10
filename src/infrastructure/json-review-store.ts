@@ -1,4 +1,5 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
 import { pathKey } from "../domain/ids.ts";
 import type { Review } from "../domain/review.ts";
@@ -34,10 +35,15 @@ export class JsonReviewStore implements ReviewStore {
 
   async save(review: Review): Promise<void> {
     await mkdir(this.reviewDir(), { recursive: true, mode: 0o700 });
-    await writeFile(this.filePath(review.documentPath), `${JSON.stringify(review, null, 2)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
+    const destination = this.filePath(review.documentPath);
+    const temporary = `${destination}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporary, `${JSON.stringify(review, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+      await rename(temporary, destination);
+    } catch (error) {
+      await rm(temporary, { force: true }).catch(() => {});
+      throw error;
+    }
   }
 
   async listRecent(limit: number): Promise<StoredReviewSummary[]> {

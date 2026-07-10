@@ -1,4 +1,4 @@
-import { RotateCcw, Save } from "lucide-react"
+import { MapPin, RotateCcw, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 interface AnnotationPanelProps {
   form: AnnotationFormValue
   selection: SelectionRange
+  maxLine: number
   saving: boolean
   onChange: (form: AnnotationFormValue) => void
   onSubmit: () => void
@@ -19,69 +20,100 @@ interface AnnotationPanelProps {
 export function AnnotationPanel({
   form,
   selection,
+  maxLine,
   saving,
   onChange,
   onSubmit,
   onReset,
 }: AnnotationPanelProps) {
   return (
-    <section className="grid gap-3">
-      <div className="font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground">Annotation</div>
+    <section className="grid gap-4">
+      <div className="rounded-xl border bg-muted/40 p-3">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <MapPin className="size-4 text-primary" />
+          {rangeText(form.lineStart, form.lineEnd)}
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Select a passage in the document, then describe what the agent should change.
+        </p>
+      </div>
+      {form.status === "resolved" ? (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary/5 p-3 text-sm">
+          <span>Editing a resolved note. Saving keeps it resolved.</span>
+          <Button type="button" size="sm" variant="outline" onClick={() => onChange({ ...form, status: "open" })}>
+            <RotateCcw /> Reopen for agent
+          </Button>
+        </div>
+      ) : null}
       <form
-        className="grid gap-3"
+        className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault()
           onSubmit()
         }}
       >
-        <div className="grid grid-cols-2 gap-2">
-          <Label className="grid gap-1 text-xs text-muted-foreground">
-            Lines
-            <Input
-              type="number"
-              min={1}
-              value={form.lineStart}
-              onChange={(event) => onChange({ ...form, lineStart: positiveInput(event.currentTarget.value) })}
-            />
-          </Label>
-          <Label className="grid gap-1 text-xs text-muted-foreground">
-            To
-            <Input
-              type="number"
-              min={1}
-              value={form.lineEnd}
-              onChange={(event) => onChange({ ...form, lineEnd: positiveInput(event.currentTarget.value) })}
-            />
-          </Label>
-        </div>
-        <SegmentedField
-          label="Severity"
-          value={form.severity}
-          options={severities}
-          onChange={(severity) => onChange({ ...form, severity })}
-        />
-        <SegmentedField
-          label="Kind"
-          value={form.kind}
-          options={kinds}
-          onChange={(kind) => onChange({ ...form, kind })}
-        />
-        <Label className="grid gap-1 text-xs text-muted-foreground">
-          Selected text
-          <Textarea
-            rows={2}
-            value={form.selectedText}
-            className="max-h-44 min-h-16 font-mono text-xs"
-            onChange={(event) => onChange({ ...form, selectedText: event.currentTarget.value })}
+        <details className="group rounded-lg border bg-background px-3 py-2">
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Adjust source range</summary>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Label className="grid gap-1 text-xs text-muted-foreground">
+              From line
+              <Input
+                type="number"
+                min={1}
+                max={maxLine}
+                value={form.lineStart}
+                onChange={(event) => onChange({ ...form, lineStart: positiveInput(event.currentTarget.value), selectedText: "" })}
+              />
+            </Label>
+            <Label className="grid gap-1 text-xs text-muted-foreground">
+              To line
+              <Input
+                type="number"
+                min={1}
+                max={maxLine}
+                value={form.lineEnd}
+                onChange={(event) => onChange({ ...form, lineEnd: positiveInput(event.currentTarget.value), selectedText: "" })}
+              />
+            </Label>
+          </div>
+        </details>
+        {form.selectedText ? (
+          <div className="rounded-lg border-l-2 border-primary bg-muted/50 px-3 py-2 font-mono text-xs leading-5 text-muted-foreground">
+            <div className="mb-1 font-sans text-[11px] font-medium uppercase tracking-wider">Selected excerpt</div>
+            <div className="line-clamp-4 whitespace-pre-wrap">{form.selectedText}</div>
+          </div>
+        ) : null}
+        <div className="grid gap-3">
+          <SegmentedField
+            label="Severity"
+            value={form.severity}
+            options={severities}
+            onChange={(severity) => onChange({ ...form, severity })}
           />
-        </Label>
-        <Label className="grid gap-1 text-xs text-muted-foreground">
+          <SegmentedField
+            label="Type"
+            value={form.kind}
+            options={kinds}
+            onChange={(kind) => onChange({ ...form, kind })}
+          />
+        </div>
+        <Label className="grid gap-1.5 text-xs font-medium">
           Feedback
           <Textarea
             rows={5}
             required
+            placeholder="State the problem, decision, or question clearly."
             value={form.note}
             onChange={(event) => onChange({ ...form, note: event.currentTarget.value })}
+          />
+        </Label>
+        <Label className="grid gap-1.5 text-xs font-medium">
+          Agent action <span className="font-normal text-muted-foreground">(optional)</span>
+          <Textarea
+            rows={2}
+            placeholder="Give a specific change when the feedback alone is not enough."
+            value={form.agentAction}
+            onChange={(event) => onChange({ ...form, agentAction: event.currentTarget.value })}
           />
         </Label>
         <div className="flex justify-end gap-2">
@@ -89,7 +121,7 @@ export function AnnotationPanel({
             <RotateCcw />
             Clear
           </Button>
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" disabled={saving || form.lineStart > maxLine || form.lineEnd > maxLine || form.lineEnd < form.lineStart}>
             <Save />
             {form.id ? "Update note" : "Add note"}
           </Button>
@@ -98,6 +130,10 @@ export function AnnotationPanel({
       </form>
     </section>
   )
+}
+
+function rangeText(start: number, end: number): string {
+  return start === end ? `Line ${start}` : `Lines ${start}-${end}`
 }
 
 function SegmentedField<T extends AnnotationSeverity | AnnotationKind>({

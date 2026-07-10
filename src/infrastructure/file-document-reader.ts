@@ -8,8 +8,12 @@ const maxDocumentBytes = 2 * 1024 * 1024;
 const allowedExtensions = new Set([".md", ".markdown"]);
 
 export class FileDocumentReader implements DocumentReader {
+  resolvePath(inputPath: string): string {
+    return resolve(expandHome(inputPath));
+  }
+
   async readMarkdown(inputPath: string): Promise<{ document: ReviewDocument; content: string }> {
-    const path = resolve(expandHome(inputPath));
+    const path = this.resolvePath(inputPath);
     const extension = extname(path).toLowerCase();
     if (!allowedExtensions.has(extension)) {
       throw new Error("Only .md and .markdown files can be reviewed");

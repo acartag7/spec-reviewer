@@ -23,6 +23,12 @@ export class ReviewSessionWaiter {
     return this.waitPromise;
   }
 
+  assertPath(path: string): void {
+    if (path !== this.path) {
+      throw new Error("path does not match the waiting review session");
+    }
+  }
+
   finish(path: string, markdown: string, openAnnotations = 0, carriedOver = 0, activeMs = 0): ReviewCompletion {
     return this.complete({ status: "finished", path, markdown, openAnnotations, carriedOver, activeMs });
   }

@@ -47,11 +47,14 @@ Spec Reviewer must never inject raw spec HTML into the main application DOM.
 The default Markdown path is:
 
 1. Parse Markdown with `marked`.
-2. Sanitize generated HTML with DOMPurify using the HTML profile.
+2. Sanitize generated HTML with a narrow Markdown element/attribute allowlist.
 3. Add source-line provenance attributes after sanitization.
 4. Render the sanitized result in the React app.
 
-User-authored raw Markdown HTML is treated as untrusted input.
+User-authored raw Markdown HTML is treated as untrusted input. Presentation
+attributes such as `style`, `class`, and `id`, and non-Markdown container tags,
+are not allowed in the main application DOM. Rich HTML belongs in the click-to-
+render sandboxed artifact path.
 
 ## Artifact Preview
 

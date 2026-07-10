@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AppConfig } from "../../config.ts";
 import type { ReviewSessionWaiter } from "../../application/review-session.ts";
 import type { ReviewerService } from "../../application/reviewer-service.ts";
+import { readActiveTime, readPathAction, readReviewDraft, readSessionAction } from "./actions.ts";
 import { readJson, sendError, sendJson } from "./json.ts";
 import { rejectUnsafeRequest } from "./security.ts";
 import { serveStatic } from "./static.ts";
@@ -66,7 +67,11 @@ async function routeApi(
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/review") {
-    sendJson(res, 200, await service.saveReview(readDraft(await readJson(req))));
+    sendJson(res, 200, await service.saveReview(readReviewDraft(await readJson(req))));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/review/baseline") {
+    sendJson(res, 200, await service.confirmCurrentVersion(readPathAction(await readJson(req)).path));
     return;
   }
   if (req.method === "GET" && url.pathname === "/api/export") {
@@ -88,6 +93,7 @@ async function routeApi(
       return;
     }
     const action = readSessionAction(await readJson(req));
+    waitSession.assertPath(action.path);
     // Persist the final active-time delta before resolving. Guard on "waiting" so a second
     // finish (idempotent complete()) does not double-persist. addActiveTime preserves annotations.
     if (waitSession.status === "waiting" && action.activeMsDelta != null) {
@@ -103,6 +109,7 @@ async function routeApi(
       return;
     }
     const action = readSessionAction(await readJson(req));
+    waitSession.assertPath(action.path);
     if (waitSession.status === "waiting" && action.activeMsDelta != null) {
       await service.addActiveTime(action.path, action.activeMsDelta);
     }
@@ -117,38 +124,4 @@ function requirePath(url: URL): string {
   const path = url.searchParams.get("path");
   if (path == null || path.trim() === "") throw new Error("path is required");
   return path;
-}
-
-function readDraft(value: unknown): { path: string; summary?: unknown; annotations?: unknown; activeMsDelta?: unknown } {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("request body must be an object");
-  }
-  const record = value as Record<string, unknown>;
-  if (typeof record.path !== "string" || record.path.trim() === "") {
-    throw new Error("path is required");
-  }
-  return { path: record.path, summary: record.summary, annotations: record.annotations, activeMsDelta: record.activeMsDelta };
-}
-
-function readSessionAction(value: unknown): { path: string; reason: string | null; activeMsDelta?: unknown } {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("request body must be an object");
-  }
-  const record = value as Record<string, unknown>;
-  if (typeof record.path !== "string" || record.path.trim() === "") {
-    throw new Error("path is required");
-  }
-  const reason = typeof record.reason === "string" && record.reason.trim() !== "" ? record.reason.trim() : null;
-  return { path: record.path, reason, activeMsDelta: record.activeMsDelta };
-}
-
-function readActiveTime(value: unknown): { path: string; activeMsDelta: unknown } {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("request body must be an object");
-  }
-  const record = value as Record<string, unknown>;
-  if (typeof record.path !== "string" || record.path.trim() === "") {
-    throw new Error("path is required");
-  }
-  return { path: record.path, activeMsDelta: record.activeMsDelta };
 }

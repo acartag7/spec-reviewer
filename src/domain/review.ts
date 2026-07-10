@@ -90,14 +90,20 @@ export function normalizeReviewDraft(
   anchorTextLookup: (annotation: Pick<Annotation, "id" | "lineStart" | "lineEnd">) => string | null = () => null,
   previous: Review | null = null,
 ): Review {
+  if (draft.summary !== undefined && typeof draft.summary !== "string") {
+    throw new Error("summary must be a string");
+  }
+  if (draft.annotations !== undefined && !Array.isArray(draft.annotations)) {
+    throw new Error("annotations must be an array");
+  }
   const now = new Date().toISOString();
   const annotations = Array.isArray(draft.annotations)
     ? draft.annotations.map((item) => normalizeAnnotation(item, now, sectionLookup, anchorTextLookup))
-    : [];
+    : previous?.annotations ?? [];
   return {
     documentPath: draft.path,
     documentDigest: digest,
-    summary: typeof draft.summary === "string" ? draft.summary : "",
+    summary: typeof draft.summary === "string" ? draft.summary : previous?.summary ?? "",
     annotations,
     createdAt: now,
     updatedAt: now,
@@ -123,10 +129,7 @@ function normalizeAnnotation(
   const status = enumValue(record.status, statuses, "status", "open");
   const createdAt = typeof record.createdAt === "string" ? record.createdAt : now;
   const id = typeof record.id === "string" && record.id.trim() !== "" ? record.id : createAnnotationId();
-  const anchorText = anchorTextLookup({ id, lineStart, lineEnd })
-    ?? optionalString(record.anchorText)
-    ?? anchorSourceText(record.anchor)
-    ?? null;
+  const anchorText = anchorTextLookup({ id, lineStart, lineEnd });
   return {
     id,
     lineStart,
@@ -181,12 +184,6 @@ function requiredString(value: unknown, field: string): string {
 
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
-}
-
-function anchorSourceText(input: unknown): string | null {
-  if (input == null || typeof input !== "object" || Array.isArray(input)) return null;
-  const record = input as Record<string, unknown>;
-  return optionalString(record.sourceText);
 }
 
 function resolveAnchor(document: ReviewDocument, annotation: Annotation): AnnotationAnchor | null {

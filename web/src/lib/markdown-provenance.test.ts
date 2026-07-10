@@ -59,6 +59,16 @@ test("renderMarkdownBlockHtml sanitizes raw markdown HTML", () => {
   expect(host.querySelector("img")?.getAttribute("src")).toBe("x")
 })
 
+test("renderMarkdownBlockHtml strips presentation HTML from the application DOM", () => {
+  const [block] = buildMarkdownBlocks('<div class="overlay" style="position:fixed;inset:0">Cover controls</div>')
+  if (block == null) throw new Error("fixture block missing")
+
+  const host = htmlHost(renderMarkdownBlockHtml(block).html)
+
+  expect(host.innerHTML).toBe("Cover controls")
+  expect(host.querySelector("[style], [class]")).toBeNull()
+})
+
 test("renderMarkdownBlockHtml identifies fenced SVG artifacts after sanitizing", () => {
   const [block] = buildMarkdownBlocks('```svg\n<svg><circle cx="4" cy="4" r="4" onload="alert(1)" /></svg>\n```')
   if (block == null) throw new Error("fixture block missing")

@@ -13,6 +13,13 @@ export interface ArtifactHtml {
   source: string
 }
 
+const markdownTags = [
+  "a", "p", "br", "strong", "em", "del", "code", "pre", "blockquote",
+  "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "hr",
+  "table", "thead", "tbody", "tr", "th", "td", "img", "input",
+]
+const markdownAttributes = ["href", "title", "src", "alt", "checked", "disabled", "type", "start", "reversed"]
+
 export function renderMarkdownBlockHtml(block: MarkdownBlock): RenderedBlockHtml {
   if (block.artifact != null) {
     return {
@@ -27,7 +34,11 @@ export function renderMarkdownBlockHtml(block: MarkdownBlock): RenderedBlockHtml
   const rawArtifact = rawArtifactFromBlock(block.raw)
   if (rawArtifact != null) return { html: "", artifact: rawArtifact }
   const dirty = marked.parse(block.raw, { async: false, gfm: true, breaks: false }) as string
-  const clean = DOMPurify.sanitize(dirty, { USE_PROFILES: { html: true } })
+  const clean = DOMPurify.sanitize(dirty, {
+    ALLOWED_TAGS: markdownTags,
+    ALLOWED_ATTR: markdownAttributes,
+    ALLOW_DATA_ATTR: false,
+  })
   const template = document.createElement("template")
   template.innerHTML = clean
   applyListAnchors(template.content, block.anchors.filter((anchor) => anchor.kind === "list-item"))

@@ -13,8 +13,6 @@ spec-reviewer review path/to/spec.md
 Homebrew installs a bundled binary. You do not need Node, pnpm, Bun, or project
 dependencies to use the app.
 
-![Spec Reviewer showing a local review with open notes and agent export](docs/assets/screenshot.jpg)
-
 ## Agent Handoff
 
 ```bash
@@ -122,18 +120,18 @@ Each annotation also stores a source-text snapshot. If the file changes, Spec
 Reviewer marks notes as `ok`, `moved`, or `not-found` and warns in the export
 instead of silently relocating edits.
 
-On a later pass over a changed file, notes saved against an older digest whose
-source text has disappeared (`not-found`) are treated as **carried over**: the
-agent export groups them separately instead of listing them as open action items,
-because the edit that removed the text most likely already addressed them.
-Relocated (`moved`) notes are still flagged so relocations are never silently
-applied.
+On a later pass over a changed file, moved and missing anchors stay open. Text
+moving or disappearing is not proof that feedback was applied. The reviewer must
+explicitly resolve, delete, or re-anchor each drifting note. Once the open drift
+is handled, **Use as new baseline** makes the live file the baseline for the
+next review round.
 
 ## Security Model
 
 The API can read local Markdown files by path, so the server binds only to
 loopback hosts. It rejects non-loopback Host/Origin headers and sends a CSP.
-Rendered Markdown is sanitized before insertion. Artifact previews render in
+Rendered Markdown uses a strict element and attribute allowlist before insertion;
+raw presentation HTML is not allowed in the application DOM. Artifact previews render in
 click-to-render sandboxed iframes with `sandbox=""`.
 
 See [docs/security-model.md](docs/security-model.md).

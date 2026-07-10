@@ -167,6 +167,10 @@ moved, or not found.
 Moved or missing text is not proof that feedback was applied. It is only a
 candidate for human review.
 
+The reviewer explicitly resolves, deletes, or re-anchors drifting notes. After
+all open drift is handled, **Use as new baseline** records the live digest as
+the baseline for the next round. There is no automatic carried-over inference.
+
 ## Local State
 
 Current state stays file-backed under `~/.spec-reviewer`:

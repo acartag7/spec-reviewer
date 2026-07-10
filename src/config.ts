@@ -22,9 +22,11 @@ export function loadConfig(
   const args = [...argv];
   if (args[0] === "--") args.shift();
   const defaults = {
-    host: env.SPEC_REVIEWER_HOST ?? "127.0.0.1",
-    port: parsePort(env.SPEC_REVIEWER_PORT) ?? 3217,
-    storageDir: expandHome(env.SPEC_REVIEWER_STORAGE_DIR ?? "~/.spec-reviewer"),
+    host: nonBlank(env.SPEC_REVIEWER_HOST) ?? "127.0.0.1",
+    port: env.SPEC_REVIEWER_PORT == null || env.SPEC_REVIEWER_PORT.trim() === ""
+      ? 3217
+      : requirePort(env.SPEC_REVIEWER_PORT),
+    storageDir: expandHome(nonBlank(env.SPEC_REVIEWER_STORAGE_DIR) ?? "~/.spec-reviewer"),
   };
   let host = defaults.host;
   let port = defaults.port;
@@ -118,6 +120,10 @@ function requireValue(args: string[], flag: string): string {
   const value = args.shift();
   if (value == null || value.trim() === "") throw new Error(`${flag} requires a value`);
   return value;
+}
+
+function nonBlank(value: string | undefined): string | null {
+  return value == null || value.trim() === "" ? null : value;
 }
 
 function requirePort(value: string): number {

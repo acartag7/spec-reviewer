@@ -70,8 +70,8 @@ export class ReviewerService {
   }
 
   async saveReview(draft: ReviewDraft): Promise<Review> {
-    const { document } = await this.reader.readMarkdown(draft.path);
-    return this.synchronized(document.path, async () => {
+    return this.synchronized(this.reader.resolvePath(draft.path), async () => {
+      const { document } = await this.reader.readMarkdown(draft.path);
       const previous = await this.store.load(document.path);
       const previousAnchors = new Map(previous?.annotations.map((item) => [item.id, item]) ?? []);
       const digest = previous != null && previous.documentDigest !== document.digest
@@ -94,6 +94,7 @@ export class ReviewerService {
         },
         previous,
       );
+      assertAnnotationRanges(review, document.lines.length);
       if (previous != null) review.createdAt = previous.createdAt;
       await this.store.save(review);
       return withResolvedAnchors(document, review);
@@ -101,14 +102,33 @@ export class ReviewerService {
   }
 
   async exportReview(path: string): Promise<{ markdown: string; openAnnotations: number; carriedOver: number; activeMs: number }> {
-    const { document } = await this.reader.readMarkdown(path);
-    const review = await this.store.load(document.path) ?? createEmptyReview(document.path, document.digest);
-    const resolved = withResolvedAnchors(document, review);
-    return {
-      markdown: exportReviewMarkdown(document, resolved),
-      ...reviewExportCounts(document, resolved),
-      activeMs: review.metrics?.activeMs ?? 0,
-    };
+    return this.synchronized(this.reader.resolvePath(path), async () => {
+      const { document } = await this.reader.readMarkdown(path);
+      const review = await this.store.load(document.path) ?? createEmptyReview(document.path, document.digest);
+      const resolved = withResolvedAnchors(document, review);
+      return {
+        markdown: exportReviewMarkdown(document, resolved),
+        ...reviewExportCounts(document, resolved),
+        activeMs: review.metrics?.activeMs ?? 0,
+      };
+    });
+  }
+
+  async confirmCurrentVersion(path: string): Promise<Review> {
+    return this.synchronized(this.reader.resolvePath(path), async () => {
+      const { document } = await this.reader.readMarkdown(path);
+      const stored = await this.store.load(document.path) ?? createEmptyReview(document.path, document.digest);
+      const resolved = withResolvedAnchors(document, stored);
+      const drifting = resolved.annotations.filter((annotation) => {
+        return annotation.status === "open" && annotation.anchor?.state !== "ok";
+      });
+      if (drifting.length > 0) {
+        throw new Error("resolve or re-anchor every drifting open note before confirming this version");
+      }
+      const updated = { ...stored, documentDigest: document.digest, updatedAt: new Date().toISOString() };
+      await this.store.save(updated);
+      return withResolvedAnchors(document, updated);
+    });
   }
 
   // Accumulate active-reviewing time WITHOUT touching annotations, summary, or timestamps. Used by the
@@ -116,8 +136,8 @@ export class ReviewerService {
   // If no review is stored yet (a read-only session that never saved feedback), one is created so a
   // reviewer who only reads and finishes still records their active time. Serialized per path.
   async addActiveTime(path: string, delta: unknown): Promise<Review> {
-    const { document } = await this.reader.readMarkdown(path);
-    return this.synchronized(document.path, async () => {
+    return this.synchronized(this.reader.resolvePath(path), async () => {
+      const { document } = await this.reader.readMarkdown(path);
       const stored = await this.store.load(document.path) ?? createEmptyReview(document.path, document.digest);
       const updated: Review = { ...stored, metrics: normalizeMetrics(stored.metrics, delta) };
       await this.store.save(updated);
@@ -139,6 +159,17 @@ export class ReviewerService {
         return { ...review, sourceState: "missing", currentDigest: null };
       }
     }));
+  }
+}
+
+function assertAnnotationRanges(review: Review, lineCount: number): void {
+  for (const annotation of review.annotations) {
+    if (annotation.lineStart > lineCount || annotation.lineEnd > lineCount) {
+      throw new Error(`annotation range exceeds document line count (${lineCount})`);
+    }
+    if (annotation.status === "open" && annotation.anchorText == null) {
+      throw new Error("open annotations must anchor to non-blank source text");
+    }
   }
 }
 

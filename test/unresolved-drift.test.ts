@@ -10,12 +10,9 @@ import { JsonReviewStore } from "../src/infrastructure/json-review-store.ts";
 import { createHttpServer } from "../src/interfaces/http/http-server.ts";
 import type { AppConfig } from "../src/config.ts";
 
-// Repro for "stale annotations resurface on iterative review passes".
-// Pass 1 saves notes anchored to the original file; the file is then edited so
-// most anchors disappear. Pass 2 must NOT re-export those gone notes as live
-// "Required Changes" — they belong in a separate "Carried Over" group, and the
-// agent-handoff completion must report the split via openAnnotations/carriedOver.
-test("stale prior-pass annotations are carried over, not re-exported as live action items", async (t) => {
+// Disappeared text is not proof that feedback was applied. Every open note stays
+// in the handoff until the human explicitly resolves, deletes, or re-anchors it.
+test("stale prior-pass annotations remain live action items", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "spec-reviewer-"));
   const docPath = join(dir, "README.md");
   await writeFile(docPath, "# Demo\n\nKeep this line\nTarget line one\nTarget line two\n", "utf8");
@@ -61,14 +58,13 @@ test("stale prior-pass annotations are carried over, not re-exported as live act
   await writeFile(docPath, "# Demo\n\nKeep this line\nRewritten section\n", "utf8");
 
   const after = await json(`${base}/api/export?path=${encodeURIComponent(docPath)}`);
-  assert.equal(after.openAnnotations, 1);
-  assert.equal(after.carriedOver, 2);
+  assert.equal(after.openAnnotations, 3);
+  assert.equal(after.carriedOver, 0);
   assert.match(after.markdown, /## Required Changes/);
   assert.match(after.markdown, /Live note/);
-  assert.doesNotMatch(after.markdown, /Gone note one/);
-  assert.doesNotMatch(after.markdown, /Gone note two/);
-  assert.doesNotMatch(after.markdown, /## Carried Over/);
-  assert.doesNotMatch(after.markdown, /\(anchor not found\)/);
+  assert.match(after.markdown, /Gone note one/);
+  assert.match(after.markdown, /Gone note two/);
+  assert.match(after.markdown, /\(anchor not found\)/);
 
   await json(`${base}/api/session/finish`, {
     method: "POST",
@@ -78,8 +74,8 @@ test("stale prior-pass annotations are carried over, not re-exported as live act
   const completion = await waiter.wait();
   assert.equal(completion.status, "finished");
   if (completion.status === "finished") {
-    assert.equal(completion.openAnnotations, 1);
-    assert.equal(completion.carriedOver, 2);
+    assert.equal(completion.openAnnotations, 3);
+    assert.equal(completion.carriedOver, 0);
   }
 });
 

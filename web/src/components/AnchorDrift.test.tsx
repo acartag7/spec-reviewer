@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { expect, test, vi } from "vitest"
 import type { Annotation } from "@/api/types"
 import { AgentExport } from "@/components/AgentExport"
@@ -16,6 +16,7 @@ test("shows per-annotation anchor state when API provides it", () => {
       onOpen={vi.fn()}
       onEdit={vi.fn()}
       onDelete={vi.fn()}
+      onStatusChange={vi.fn()}
     />,
   )
 
@@ -51,10 +52,9 @@ test("makes export warnings visible for drifted anchors", () => {
   expect(screen.getByRole("alert")).toHaveTextContent("Review anchors before copying export: 1 moved.")
 })
 
-test("groups prior-version notes into a Previous version bubble when the review is stale", () => {
+test("keeps not-found notes open until the human resolves them", () => {
   render(
     <AnnotationList
-      stale
       annotations={[
         annotation({ id: "current", anchorState: "ok", note: "Current note" }),
         annotation({ id: "prior", anchorState: "not-found", note: "Prior note" }),
@@ -62,10 +62,11 @@ test("groups prior-version notes into a Previous version bubble when the review 
       onOpen={vi.fn()}
       onEdit={vi.fn()}
       onDelete={vi.fn()}
+      onStatusChange={vi.fn()}
     />,
   )
 
-  expect(screen.getByText("Previous version")).toBeInTheDocument()
+  expect(screen.queryByText("Previous version")).not.toBeInTheDocument()
   expect(screen.getByText("Current note")).toBeInTheDocument()
   expect(screen.getByText("Prior note")).toBeInTheDocument()
 })
@@ -77,11 +78,29 @@ test("keeps not-found notes in the main list when the review is current", () => 
       onOpen={vi.fn()}
       onEdit={vi.fn()}
       onDelete={vi.fn()}
+      onStatusChange={vi.fn()}
     />,
   )
 
   expect(screen.queryByText("Previous version")).not.toBeInTheDocument()
   expect(screen.getByText("Still actionable")).toBeInTheDocument()
+})
+
+test("resolves an annotation only through an explicit human action", () => {
+  const onStatusChange = vi.fn()
+  const open = annotation({ note: "Needs confirmation" })
+  render(
+    <AnnotationList
+      annotations={[open]}
+      onOpen={vi.fn()}
+      onEdit={vi.fn()}
+      onDelete={vi.fn()}
+      onStatusChange={onStatusChange}
+    />,
+  )
+
+  fireEvent.click(screen.getByRole("button", { name: "Resolve" }))
+  expect(onStatusChange).toHaveBeenCalledWith(open, "resolved")
 })
 
 function annotation(overrides: Partial<Annotation> = {}): Annotation {

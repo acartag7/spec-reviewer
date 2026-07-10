@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, expect, test, vi } from "vitest"
 import { ReviewerPage } from "@/pages/ReviewerPage"
@@ -11,6 +11,7 @@ function json(body: unknown, status = 200): Response {
 
 afterEach(() => {
   vi.useRealTimers()
+  vi.unstubAllGlobals()
   Object.defineProperty(document, "hasFocus", { value: () => false, configurable: true })
   Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true })
 })
@@ -65,6 +66,40 @@ test("Finish in a wait session flushes active time into the request body before 
   expect(finishBody).not.toBeNull()
   expect(finishBody!.activeMsDelta).toBeGreaterThan(0)
   expect(screen.getByText("Review submitted")).toBeInTheDocument()
-  expect(screen.getByText(/2 live/)).toBeInTheDocument()
+  expect(screen.getByText(/2 open notes/)).toBeInTheDocument()
   close.mockRestore()
+})
+
+test("a failed annotation save keeps the draft visible", async () => {
+  const documentFixture = {
+    path: "/tmp/spec.md",
+    title: "Spec",
+    digest: "abc",
+    lines: [{ number: 1, text: "# Spec", kind: "heading", sectionTitle: "Spec" }],
+    sections: [{ line: 1, level: 1, title: "Spec" }],
+  }
+  const review = { documentPath: "/tmp/spec.md", documentDigest: "abc", summary: "", annotations: [], createdAt: "t", updatedAt: "t", metrics: { activeMs: 0 } }
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url === "/api/config") return json({ defaultDocumentPath: null, waitForReview: true })
+    if (url === "/api/reviews") return json([])
+    if (url.startsWith("/api/document?")) return json({ document: documentFixture, review, stale: false, sourceState: "current" })
+    if (url.startsWith("/api/export?")) return json({ markdown: "# Agent Review Feedback" })
+    if (url === "/api/review" && init?.method === "POST") return json({ error: { message: "disk full" } }, 500)
+    return json({ error: { message: "not found" } }, 404)
+  })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <TooltipProvider>
+        <MemoryRouter initialEntries={["/?path=/tmp/spec.md"]}><ReviewerPage /></MemoryRouter>
+      </TooltipProvider>
+    </QueryClientProvider>,
+  )
+
+  const feedback = await screen.findByRole("textbox", { name: "Feedback" })
+  fireEvent.change(feedback, { target: { value: "Keep this draft" } })
+  fireEvent.click(screen.getByRole("button", { name: "Add note" }))
+  await waitFor(() => expect(screen.getByText("disk full")).toBeInTheDocument())
+  expect(feedback).toHaveValue("Keep this draft")
 })

@@ -7,8 +7,7 @@ test("finished outcome shows the submitted state, counts, active time, and close
   render(<SessionOutcomeScreen outcome="finished" openAnnotations={2} carriedOver={3} activeMs={125000} />)
 
   expect(screen.getByText("Review submitted")).toBeInTheDocument()
-  expect(screen.getByText(/2 live/)).toBeInTheDocument()
-  expect(screen.getByText(/3 carried over/)).toBeInTheDocument()
+  expect(screen.getByText(/2 open notes/)).toBeInTheDocument()
   expect(screen.getByText(/2m 05s/)).toBeInTheDocument()
   expect(close).toHaveBeenCalled()
   close.mockRestore()

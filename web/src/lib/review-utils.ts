@@ -3,6 +3,7 @@ import type {
   AnnotationAnchorState,
   AnnotationKind,
   AnnotationSeverity,
+  AnnotationStatus,
   Review,
   SelectionRange,
 } from "@/api/types"
@@ -30,7 +31,9 @@ export interface AnnotationFormValue {
   selectedText: string
   severity: AnnotationSeverity
   kind: AnnotationKind
+  status: AnnotationStatus
   note: string
+  agentAction: string
 }
 
 export interface AnchorDriftSummary {
@@ -48,7 +51,9 @@ export function emptyForm(selection: SelectionRange): AnnotationFormValue {
     selectedText: selection.selectedText,
     severity: "major",
     kind: "issue",
+    status: "open",
     note: "",
+    agentAction: "",
   }
 }
 
@@ -61,7 +66,9 @@ export function formFromAnnotation(annotation: Annotation): AnnotationFormValue 
     selectedText: annotation.selectedText ?? "",
     severity: annotation.severity,
     kind: annotation.kind,
+    status: annotation.status,
     note: annotation.note,
+    agentAction: annotation.agentAction,
   }
 }
 
@@ -72,12 +79,12 @@ export function createAnnotation(form: AnnotationFormValue, selection: Selection
     lineStart: Number(form.lineStart || selection.lineStart || 1),
     lineEnd: Number(form.lineEnd || selection.lineEnd || form.lineStart || 1),
     section: null,
-    selectedText: form.selectedText.trim() || selection.selectedText || null,
+    selectedText: form.selectedText.trim() || null,
     kind: form.kind,
     severity: form.severity,
-    status: "open",
+    status: form.status,
     note: form.note.trim(),
-    agentAction: "",
+    agentAction: form.agentAction.trim(),
     createdAt: form.createdAt || now,
     updatedAt: now,
   }
@@ -93,6 +100,18 @@ export function upsertAnnotation(review: Review, annotation: Annotation): Review
 
 export function removeAnnotation(review: Review, id: string): Review {
   return { ...review, annotations: review.annotations.filter((item) => item.id !== id) }
+}
+
+export function clearSubmittedForm(
+  current: AnnotationFormValue,
+  submitted: AnnotationFormValue,
+  selection: SelectionRange,
+): AnnotationFormValue {
+  const unchanged = Object.keys(submitted).every((key) => {
+    const field = key as keyof AnnotationFormValue
+    return current[field] === submitted[field]
+  })
+  return unchanged ? emptyForm(selection) : current
 }
 
 export function overlappingOpenAnnotations(annotations: Annotation[], line: number): Annotation[] {
@@ -134,6 +153,7 @@ export function anchorStateLabel(state: AnnotationAnchorState): string {
 export function anchorDriftSummary(annotations: Annotation[]): AnchorDriftSummary {
   return annotations.reduce<AnchorDriftSummary>(
     (summary, annotation) => {
+      if (annotation.status !== "open") return summary
       const state = annotationAnchorState(annotation)
       if (state === "moved") summary.moved += 1
       if (state === "not-found") summary.notFound += 1

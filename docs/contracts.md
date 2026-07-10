@@ -41,8 +41,9 @@ Response:
 When `sourceState` is `changed`, line anchors may be stale and should be
 manually rechecked before sending feedback to an agent.
 
-Saving a changed review does not clear the changed state. A later explicit anchor
-re-sync flow should be responsible for clearing stale state.
+Saving a changed review does not clear the changed state. The reviewer must
+resolve or re-anchor every drifting open note, then explicitly confirm the live
+file as the new review baseline.
 
 ## Save Review
 
@@ -79,6 +80,30 @@ The server stores the original `anchorText` for each note. Open/export responses
 resolve that text against the current document and expose transient `anchor` and
 `anchorState` response fields.
 
+Wrongly typed or missing `annotations` are rejected. When `summary` is omitted,
+the saved summary is preserved; `null` and other non-string summary values are
+rejected. A partial payload must not replace a stored review with an empty one.
+
+Open annotations must include at least one non-blank source line so every note
+can be rechecked before advancing the review baseline.
+
+## Confirm Current Version
+
+```text
+POST /api/review/baseline
+```
+
+Request:
+
+```json
+{ "path": "/absolute/spec.md" }
+```
+
+This updates the saved review digest to the current file only when every open
+annotation has a current (`ok`) anchor. Moved or missing open notes must first be
+resolved, deleted, or re-anchored. This is the explicit boundary between review
+rounds; it never infers resolution from a source edit.
+
 ## Export
 
 ```text
@@ -99,8 +124,12 @@ If the current file digest differs from the saved review digest, export includes
 a warning and the current digest.
 
 If an annotation anchor moved, export marks the saved range and current range. If
-the saved source text is not found, export marks the annotation as not found. In
-both drift cases, export omits the old selected-text quote.
+the saved source text is not found, export marks the annotation as not found. The
+note remains an open action item until the human resolves it. In both drift cases,
+export omits the old selected-text quote.
+
+In a waiting session, Finish and Cancel accept only the document path that
+created the session. A different path is rejected.
 
 ## Local Server Security
 

@@ -92,7 +92,7 @@ test("exportReviewMarkdown marks moved anchors and omits stale selected text", (
   assert.doesNotMatch(markdown, /Selected text: Old selected text/);
 });
 
-test("exportReviewMarkdown excludes not-found prior-pass notes, keeps current-version notes", () => {
+test("exportReviewMarkdown keeps not-found prior-pass notes actionable", () => {
   const document = parseMarkdownDocument("/tmp/spec.md", "# Spec\nKept line\n");
   const review: Review = {
     documentPath: document.path,
@@ -116,9 +116,8 @@ test("exportReviewMarkdown excludes not-found prior-pass notes, keeps current-ve
 
   assert.match(markdown, /## Required Changes/);
   assert.match(markdown, /Still here/);
-  assert.doesNotMatch(markdown, /Check missing line/);
-  assert.doesNotMatch(markdown, /## Carried Over/);
-  assert.doesNotMatch(markdown, /\(anchor not found\)/);
+  assert.match(markdown, /Check missing line/);
+  assert.match(markdown, /\(anchor not found\)/);
 });
 
 test("exportReviewMarkdown keeps a not-found anchor actionable when the review is current", () => {
@@ -143,7 +142,7 @@ test("exportReviewMarkdown keeps a not-found anchor actionable when the review i
   assert.doesNotMatch(markdown, /## Carried Over/);
 });
 
-test("reviewExportCounts splits live and carried-over open annotations", () => {
+test("reviewExportCounts keeps every unresolved annotation live", () => {
   const document = parseMarkdownDocument("/tmp/spec.md", "# Spec\nKept line\n");
   const review: Review = {
     documentPath: document.path,
@@ -171,8 +170,8 @@ test("reviewExportCounts splits live and carried-over open annotations", () => {
 
   const counts = reviewExportCounts(document, review);
 
-  assert.equal(counts.openAnnotations, 1);
-  assert.equal(counts.carriedOver, 2);
+  assert.equal(counts.openAnnotations, 3);
+  assert.equal(counts.carriedOver, 0);
 });
 
 function annotation(id: string, line: number, severity: Review["annotations"][number]["severity"], kind: Review["annotations"][number]["kind"], note: string) {
