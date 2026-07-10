@@ -27,33 +27,35 @@ export function AnnotationPanel({
   onReset,
 }: AnnotationPanelProps) {
   return (
-    <section className="grid gap-4">
-      <div className="rounded-xl border bg-muted/40 p-3">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <MapPin className="size-4 text-primary" />
+    <section className="grid gap-3">
+      <div className="flex items-start gap-2 border-b pb-3">
+        <MapPin className="mt-0.5 size-3.5 text-muted-foreground" />
+        <div>
+          <div className="text-xs font-medium">
           {rangeText(form.lineStart, form.lineEnd)}
+          </div>
+          <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+            Select a passage, then describe what the agent should change.
+          </p>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Select a passage in the document, then describe what the agent should change.
-        </p>
       </div>
       {form.status === "resolved" ? (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary/5 p-3 text-sm">
-          <span>Editing a resolved note. Saving keeps it resolved.</span>
+        <div className="flex items-center justify-between gap-3 rounded-lg bg-accent/60 p-2.5 text-xs">
+          <span>Resolved note</span>
           <Button type="button" size="sm" variant="outline" onClick={() => onChange({ ...form, status: "open" })}>
             <RotateCcw /> Reopen for agent
           </Button>
         </div>
       ) : null}
       <form
-        className="grid gap-4"
+        className="grid gap-3"
         onSubmit={(event) => {
           event.preventDefault()
           onSubmit()
         }}
       >
-        <details className="group rounded-lg border bg-background px-3 py-2">
-          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Adjust source range</summary>
+        <details className="group">
+          <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground">Adjust source range</summary>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <Label className="grid gap-1 text-xs text-muted-foreground">
               From line
@@ -78,12 +80,12 @@ export function AnnotationPanel({
           </div>
         </details>
         {form.selectedText ? (
-          <div className="rounded-lg border-l-2 border-primary bg-muted/50 px-3 py-2 font-mono text-xs leading-5 text-muted-foreground">
-            <div className="mb-1 font-sans text-[11px] font-medium uppercase tracking-wider">Selected excerpt</div>
+          <div className="rounded-md border bg-background/70 px-2.5 py-2 font-mono text-[11px] leading-4 text-muted-foreground">
+            <div className="mb-1 font-sans text-[10px] font-medium uppercase tracking-wider">Selected excerpt</div>
             <div className="line-clamp-4 whitespace-pre-wrap">{form.selectedText}</div>
           </div>
         ) : null}
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           <SegmentedField
             label="Severity"
             value={form.severity}
@@ -100,7 +102,7 @@ export function AnnotationPanel({
         <Label className="grid gap-1.5 text-xs font-medium">
           Feedback
           <Textarea
-            rows={5}
+            rows={4}
             required
             placeholder="State the problem, decision, or question clearly."
             value={form.note}
@@ -117,11 +119,11 @@ export function AnnotationPanel({
           />
         </Label>
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onReset}>
+          <Button type="button" size="sm" variant="ghost" onClick={onReset}>
             <RotateCcw />
             Clear
           </Button>
-          <Button type="submit" disabled={saving || form.lineStart > maxLine || form.lineEnd > maxLine || form.lineEnd < form.lineStart}>
+          <Button type="submit" size="sm" disabled={saving || form.lineStart > maxLine || form.lineEnd > maxLine || form.lineEnd < form.lineStart}>
             <Save />
             {form.id ? "Update note" : "Add note"}
           </Button>
@@ -150,7 +152,7 @@ function SegmentedField<T extends AnnotationSeverity | AnnotationKind>({
   return (
     <div className="grid gap-1">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div role="radiogroup" aria-label={label} className="inline-flex flex-wrap gap-1 rounded-lg bg-muted p-[3px]">
+      <div role="radiogroup" aria-label={label} className="inline-flex flex-wrap gap-0.5 rounded-md border bg-background/70 p-0.5">
         {options.map((option) => (
           <button
             key={option.value}
@@ -158,8 +160,8 @@ function SegmentedField<T extends AnnotationSeverity | AnnotationKind>({
             role="radio"
             aria-checked={option.value === value}
             className={cn(
-              "h-7 min-w-16 rounded-md px-2 text-sm font-medium text-muted-foreground",
-              option.value === value && "bg-background text-foreground shadow-sm",
+              "h-6 min-w-14 rounded px-2 text-xs text-muted-foreground",
+              option.value === value && "bg-accent text-accent-foreground",
             )}
             onClick={() => onChange(option.value)}
           >

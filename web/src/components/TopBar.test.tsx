@@ -23,4 +23,5 @@ test("copy and finish stay disabled while feedback is saving", () => {
 
   expect(screen.getByRole("button", { name: "Copy feedback" })).toBeDisabled()
   expect(screen.getByRole("button", { name: "Finish review" })).toBeDisabled()
+  expect(screen.getByLabelText("Current document: /tmp/spec.md")).toHaveTextContent("tmp/spec.md")
 })

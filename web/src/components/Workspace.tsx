@@ -30,7 +30,7 @@ interface WorkspaceProps {
 
 export function Workspace(props: WorkspaceProps) {
   return (
-    <main className="grid min-h-[calc(100dvh-4rem)] grid-cols-1 bg-muted/30 lg:h-[calc(100dvh-4rem)] lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_420px]">
+    <main className="grid h-[calc(100dvh-2.5rem)] min-h-0 grid-cols-1 grid-rows-[55%_45%] overflow-hidden bg-card md:grid-cols-[minmax(0,1fr)_minmax(320px,360px)] md:grid-rows-1">
       <ReaderPane
         document={props.document}
         review={props.review}

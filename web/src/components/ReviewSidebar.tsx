@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { FileCheck2, ListChecks, MessageSquarePlus, RefreshCw, Send } from "lucide-react"
+import { RefreshCw } from "lucide-react"
 import type { Annotation, Review, ReviewDocument, ReviewSourceState, SelectionRange } from "@/api/types"
 import { AgentExport } from "@/components/AgentExport"
 import { AnnotationList } from "@/components/AnnotationList"
@@ -43,25 +43,22 @@ export function ReviewSidebar(props: ReviewSidebarProps) {
   useEffect(() => setTab("write"), [props.selection.lineStart, props.selection.lineEnd, props.selection.selectedText])
 
   return (
-    <aside className="review-rail grid min-h-0 grid-rows-[auto_1fr] border-t bg-card lg:border-l lg:border-t-0">
-      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary"><ListChecks className="size-4" /></span>
-          <div>
-            <div className="text-sm font-semibold">Review workspace</div>
-            <div className="text-xs text-muted-foreground">{props.saving ? "Saving changes…" : "Changes save locally"}</div>
-          </div>
+    <aside className="review-rail grid min-h-0 grid-rows-[auto_1fr] border-t bg-muted/55 md:border-l md:border-t-0">
+      <div className="flex h-9 items-center justify-between gap-3 border-b px-3">
+        <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Review</div>
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span>{props.saving ? "Saving…" : "Saved locally"}</span>
+          <Badge variant={openCount > 0 ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">{openCount} open</Badge>
         </div>
-        <Badge variant={openCount > 0 ? "secondary" : "outline"}>{openCount} open</Badge>
       </div>
-      <Tabs value={tab} onValueChange={setTab} className="min-h-0 gap-0">
-        <TabsList variant="line" className="mx-4 mt-2 grid h-10 w-auto grid-cols-3 border-b">
-          <TabsTrigger value="write"><MessageSquarePlus /> Feedback</TabsTrigger>
-          <TabsTrigger value="notes"><FileCheck2 /> Notes <span className="text-xs">{openCount}</span></TabsTrigger>
-          <TabsTrigger value="export"><Send /> Export</TabsTrigger>
+      <Tabs value={tab} onValueChange={setTab} className="min-h-0 gap-0 overflow-hidden">
+        <TabsList variant="line" className="mx-2 mt-1 grid h-8 w-auto grid-cols-3 border-b">
+          <TabsTrigger value="write" className="text-xs">Feedback</TabsTrigger>
+          <TabsTrigger value="notes" className="text-xs">Notes <span className="text-[10px]">{openCount}</span></TabsTrigger>
+          <TabsTrigger value="export" className="text-xs">Export</TabsTrigger>
         </TabsList>
-        <div className="review-scroll min-h-0 overflow-auto">
-          <TabsContent value="write" className="p-4">
+        <div className="review-scroll min-h-0 flex-1 overflow-auto">
+          <TabsContent value="write" className="p-3">
             <AnnotationPanel
               form={props.form}
               selection={props.selection}
@@ -72,9 +69,9 @@ export function ReviewSidebar(props: ReviewSidebarProps) {
               onReset={props.onFormReset}
             />
           </TabsContent>
-          <TabsContent value="notes" className="grid gap-4 p-4">
+          <TabsContent value="notes" className="grid gap-3 p-3">
             {props.sourceState === "changed" ? (
-              <div className="rounded-xl border border-sev-major/30 bg-sev-major/10 p-3">
+              <div className="rounded-lg border border-sev-major/30 bg-sev-major/10 p-3">
                 <div className="text-sm font-semibold">Review the changed version</div>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   {openDriftCount > 0
@@ -105,7 +102,7 @@ export function ReviewSidebar(props: ReviewSidebarProps) {
               onStatusChange={props.onStatusChange}
             />
           </TabsContent>
-          <TabsContent value="export" className="p-4">
+          <TabsContent value="export" className="p-3">
             <AgentExport
               markdown={props.exportMarkdown}
               loading={props.exportLoading}

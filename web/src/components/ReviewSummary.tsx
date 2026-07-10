@@ -13,10 +13,10 @@ interface ReviewSummaryProps {
 
 export function ReviewSummary({ value, dirty, saving, onChange, onSave }: ReviewSummaryProps) {
   return (
-    <section className="grid gap-2 rounded-xl border bg-muted/25 p-3">
+    <section className="grid gap-2 border-b pb-3">
       <div>
-        <div className="text-sm font-semibold">Overall assessment</div>
-        <p className="mt-0.5 text-xs text-muted-foreground">Optional context placed before the line-level feedback.</p>
+        <div className="text-xs font-medium">Overall assessment</div>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">Optional context before line-level feedback.</p>
       </div>
       <Label className="sr-only" htmlFor="review-summary">Overall assessment</Label>
       <Textarea
@@ -27,7 +27,7 @@ export function ReviewSummary({ value, dirty, saving, onChange, onSave }: Review
         onChange={(event) => onChange(event.currentTarget.value)}
       />
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-muted-foreground">{dirty ? "Unsaved changes" : "Saved"}</span>
+        <span className="text-[11px] text-muted-foreground">{dirty ? "Unsaved changes" : "Saved"}</span>
         <Button type="button" size="sm" variant="outline" disabled={!dirty || saving} onClick={onSave}>
           <Save /> Save summary
         </Button>

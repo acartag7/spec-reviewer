@@ -74,48 +74,54 @@
 .review-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
 .review-scroll::-webkit-scrollbar-thumb:hover { background: var(--input); }
 
-.document-paper {
-  background-image: linear-gradient(to bottom, color-mix(in srgb, var(--card) 96%, var(--primary) 4%), var(--card));
-}
+.reader-alert:empty { display: none; }
 
 .annotation-card {
-  border-left-width: 3px;
-  border-left-color: var(--sev-note);
+  --annotation-marker: var(--sev-note);
+  position: relative;
 }
 
-.annotation-card[data-severity="blocker"] { border-left-color: var(--sev-blocker); }
-.annotation-card[data-severity="major"] { border-left-color: var(--sev-major); }
-.annotation-card[data-severity="minor"] { border-left-color: var(--sev-minor); }
+.annotation-card::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.65rem;
+  inset-inline-start: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--annotation-marker);
+}
+
+.annotation-card[data-severity="blocker"] { --annotation-marker: var(--sev-blocker); }
+.annotation-card[data-severity="major"] { --annotation-marker: var(--sev-major); }
+.annotation-card[data-severity="minor"] { --annotation-marker: var(--sev-minor); }
 
 .markdown-body {
-  max-width: 760px;
-  margin: 0 auto;
-  color: var(--muted-foreground);
-  font-size: 15px;
-  line-height: 1.72;
+  color: var(--foreground);
+  font-size: 1rem;
+  line-height: 1.62;
 }
 
 .markdown-block {
   position: relative;
-  margin: 0 -0.875rem;
-  padding: 0.375rem 0.875rem;
-  border-radius: var(--radius-md);
-  scroll-margin-top: 5.5rem;
+  margin-inline: -0.75rem;
+  padding: 0.2rem 0.75rem;
+  border-radius: 0.375rem;
+  scroll-margin-top: 3.5rem;
 }
 
 .markdown-block:hover,
 .markdown-block.selected {
-  background: color-mix(in srgb, var(--accent) 74%, transparent);
+  background: color-mix(in srgb, var(--accent) 62%, transparent);
 }
 
 .markdown-block.selected {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: var(--accent);
 }
 
 .markdown-block[data-severity]::before {
   content: "";
   position: absolute;
-  inset: 0.625rem auto 0.625rem 0;
+  inset: 0.45rem auto 0.45rem 0;
   width: 2px;
   border-radius: 2px;
   background: var(--sev-note);
@@ -128,16 +134,15 @@
 .markdown-block::after {
   content: "L" attr(data-source-line);
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--background);
+  top: 0.35rem;
+  right: 2rem;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
   color: var(--muted-foreground);
   font-family: var(--font-mono);
-  font-size: 0.625rem;
+  font-size: 0.6rem;
   opacity: 0;
-  padding: 0.0625rem 0.375rem;
+  padding: 0.05rem 0.25rem;
   transition: opacity 120ms ease;
 }
 
@@ -146,25 +151,33 @@
   opacity: 1;
 }
 
-.markdown-body :where(h1, h2, h3, h4) {
-  color: var(--foreground);
-  font-weight: 650;
-  line-height: 1.25;
-  margin: 1.4rem 0 0.6rem;
+@media (min-width: 640px) {
+  .markdown-block::after { right: 0.4rem; }
 }
 
-.markdown-body h1 { font-size: 1.7rem; }
-.markdown-body h2 { font-size: 1.25rem; }
-.markdown-body h3 { font-size: 1.05rem; }
-.markdown-body p { margin: 0 0 0.9rem; }
-.markdown-body :where(ul, ol) { margin: 0 0 0.9rem; padding-left: 1.35rem; }
+.markdown-body :where(h1, h2, h3, h4) {
+  color: var(--foreground);
+  font-weight: 600;
+  line-height: 1.25;
+  margin-block: 0;
+}
+
+.markdown-body h1 { font-size: 1.75rem; letter-spacing: -0.02em; }
+.markdown-body h2 { font-size: 1.4rem; letter-spacing: -0.015em; }
+.markdown-body h3 { font-size: 1.15rem; }
+.markdown-body h4 { font-size: 1.05rem; color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground)); }
+.markdown-body :where(p, ul, ol, blockquote, pre, table) { margin-block: 0; }
+.markdown-body .markdown-block + .markdown-block { margin-top: 0.15rem; }
+.markdown-body .markdown-block:has(:is(h1, h2, h3, h4)) { margin-top: 0.8rem; }
+.markdown-body .markdown-block:has(:is(h1, h2, h3, h4)) + .markdown-block { margin-top: 0; }
+.markdown-body :where(ul, ol) { padding-left: 1.35rem; }
 .markdown-body li { margin: 0.2rem 0; }
 .markdown-body li::marker { color: var(--muted-foreground); }
-.markdown-body blockquote { border-left: 2px solid var(--border); margin: 1rem 0; padding-left: 1rem; }
+.markdown-body blockquote { border-left: 2px solid var(--border); padding-left: 1rem; color: var(--muted-foreground); }
 .markdown-body a { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
 .markdown-body strong { color: var(--foreground); font-weight: 650; }
-.markdown-body code { border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.82em; padding: 0.1rem 0.28rem; }
-.markdown-body pre { background: #0a0a0a; border-radius: var(--radius-md); color: #ededed; overflow: auto; padding: 0.9rem 1rem; }
+.markdown-body code { background: var(--muted); border-radius: 0.25rem; font-family: var(--font-mono); font-size: 0.85em; padding: 0.1rem 0.3rem; }
+.markdown-body pre { background: var(--muted); border-radius: var(--radius-md); color: var(--foreground); overflow: auto; padding: 1.25rem 0.9rem; }
 .markdown-body pre code { border: 0; color: inherit; display: block; padding: 0; }
 
 .source-line {

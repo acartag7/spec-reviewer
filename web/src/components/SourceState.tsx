@@ -23,7 +23,7 @@ const chipClass: Record<ReviewSourceState, string> = {
 export function SourceStateBadge({ state }: SourceStateBadgeProps) {
   const Icon = stateIcon(state)
   return (
-    <Badge variant="outline" className={cn("capitalize", chipClass[state])}>
+    <Badge variant="outline" className={cn("h-5 gap-1 px-1.5 text-[10px] capitalize", chipClass[state])}>
       <Icon />
       {sourceStateLabel(state)}
     </Badge>
@@ -55,7 +55,7 @@ function sourceStateMessage(state: ReviewSourceState): string | null {
   if (state === "changed") {
     return "This file changed since these notes were saved. Recheck line anchors before sending feedback."
   }
-  if (state === "unreviewed") return "No saved review yet. Notes will start tracking this file version."
+  if (state === "unreviewed") return null
   if (state === "missing") return "The saved review points at a file that is no longer available."
   return null
 }

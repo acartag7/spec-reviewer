@@ -32,12 +32,11 @@ export function StartScreen({
   }, [defaultPath, path])
 
   return (
-    <main className="mx-auto grid min-h-[calc(100dvh-4rem)] w-full max-w-7xl gap-6 p-5 lg:grid-cols-[minmax(420px,1.15fr)_minmax(320px,0.85fr)] lg:p-10 xl:p-14">
+    <main className="mx-auto grid min-h-[calc(100dvh-2.5rem)] w-full max-w-6xl items-center gap-8 p-6 lg:grid-cols-[minmax(420px,1fr)_360px] lg:p-10">
       <section
         className={cn(
-          "relative flex min-h-[30rem] flex-col justify-center gap-6 overflow-hidden rounded-3xl border bg-card p-7 shadow-sm sm:p-10",
-          "before:absolute before:-right-20 before:-top-24 before:size-72 before:rounded-full before:bg-primary/10 before:blur-3xl",
-          dragging && "border-primary bg-accent shadow-md",
+          "flex min-h-[25rem] flex-col justify-center gap-5 p-4 sm:p-8",
+          dragging && "rounded-xl bg-accent/50",
         )}
         onDragOver={(event) => {
           event.preventDefault()
@@ -51,12 +50,12 @@ export function StartScreen({
           if (file != null) onOpenFile(file)
         }}
       >
-        <div className="relative grid gap-4">
-          <span className="grid size-11 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+        <div className="grid gap-4">
+          <span className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary">
             <FileCheck2 className="size-5" />
           </span>
           <div className="grid gap-2">
-            <h1 className="max-w-xl font-heading text-3xl font-semibold tracking-tight sm:text-4xl">Review a Markdown spec</h1>
+            <h1 className="max-w-xl font-heading text-3xl font-semibold tracking-tight">Review a Markdown spec</h1>
             <p className="max-w-lg text-sm leading-6 text-muted-foreground">
               Read the rendered document, anchor feedback to source lines, and return one clean handoff to the agent.
             </p>
@@ -68,7 +67,7 @@ export function StartScreen({
           </div>
         </div>
         <form
-          className="relative flex flex-col gap-2 rounded-2xl border bg-background p-2 shadow-sm sm:flex-row"
+          className="flex flex-col gap-1 rounded-lg border bg-card p-1 sm:flex-row"
           onSubmit={(event) => {
             event.preventDefault()
             onOpenPath(path.trim())
@@ -87,7 +86,7 @@ export function StartScreen({
             <ArrowRight />
           </Button>
         </form>
-        <div className="relative flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3">
           <Button type="button" variant="ghost" asChild>
             <label>
               <Upload />
@@ -108,7 +107,7 @@ export function StartScreen({
           <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex"><LockKeyhole className="size-3.5" /> Files stay on this machine</span>
         </div>
       </section>
-      <Card className="min-h-80 rounded-3xl shadow-sm">
+      <Card className="min-h-80 rounded-xl bg-card shadow-none">
         <CardHeader>
           <CardTitle className="flex items-center justify-between">Recent reviews <Badge variant="secondary">{reviews.length}</Badge></CardTitle>
         </CardHeader>
@@ -137,7 +136,7 @@ function RecentReviews({
         <button
           key={review.documentPath}
           type="button"
-          className="group grid gap-2 rounded-xl border bg-background p-3 text-left transition hover:-translate-y-px hover:border-primary/30 hover:shadow-sm"
+          className="group grid gap-2 rounded-lg border border-transparent bg-muted/45 p-3 text-left transition hover:border-border hover:bg-muted/70"
           onClick={() => onOpenPath(review.documentPath)}
         >
           <span className="flex items-center justify-between gap-3 font-medium">{review.title}<ArrowRight className="size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" /></span>

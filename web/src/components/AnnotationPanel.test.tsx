@@ -50,7 +50,7 @@ test("editing a resolved note keeps its status visible and offers an explicit re
     />,
   )
 
-  expect(screen.getByText("Editing a resolved note. Saving keeps it resolved.")).toBeInTheDocument()
+  expect(screen.getByText("Resolved note")).toBeInTheDocument()
   fireEvent.click(screen.getByRole("button", { name: "Reopen for agent" }))
   expect(onChange).toHaveBeenLastCalledWith({ ...form, status: "open" })
 })

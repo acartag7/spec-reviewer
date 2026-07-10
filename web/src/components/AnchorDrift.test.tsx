@@ -5,7 +5,7 @@ import { AgentExport } from "@/components/AgentExport"
 import { AnnotationList } from "@/components/AnnotationList"
 import { SourceStateBanner } from "@/components/SourceState"
 
-test("shows per-annotation anchor state when API provides it", () => {
+test("shows actionable anchor drift without adding healthy-state noise", () => {
   render(
     <AnnotationList
       annotations={[
@@ -20,7 +20,7 @@ test("shows per-annotation anchor state when API provides it", () => {
     />,
   )
 
-  expect(screen.getByText("anchor ok")).toBeInTheDocument()
+  expect(screen.queryByText("anchor ok")).not.toBeInTheDocument()
   expect(screen.getByText("moved to L8-9")).toBeInTheDocument()
   expect(screen.getByText("anchor not found")).toBeInTheDocument()
 })
@@ -101,6 +101,23 @@ test("resolves an annotation only through an explicit human action", () => {
 
   fireEvent.click(screen.getByRole("button", { name: "Resolve" }))
   expect(onStatusChange).toHaveBeenCalledWith(open, "resolved")
+})
+
+test("opens a note through its keyboard-accessible source range control", () => {
+  const onOpen = vi.fn()
+  const open = annotation()
+  render(
+    <AnnotationList
+      annotations={[open]}
+      onOpen={onOpen}
+      onEdit={vi.fn()}
+      onDelete={vi.fn()}
+      onStatusChange={vi.fn()}
+    />,
+  )
+
+  fireEvent.click(screen.getByRole("button", { name: "L4" }))
+  expect(onOpen).toHaveBeenCalledWith(open)
 })
 
 function annotation(overrides: Partial<Annotation> = {}): Annotation {
