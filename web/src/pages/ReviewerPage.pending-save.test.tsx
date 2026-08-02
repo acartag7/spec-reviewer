@@ -90,7 +90,7 @@ test("copy and terminal actions wait for an annotation save", async () => {
   await waitFor(() => expect(saveBody).not.toBeNull())
 
   expect(screen.getByRole("button", { name: "Copy feedback" })).toBeDisabled()
-  expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled()
+  expect(screen.getByRole("button", { name: "Cancel review" })).toBeDisabled()
   expect(screen.getByRole("button", { name: /Finish review/i })).toBeDisabled()
   expect(finishCalls).toBe(0)
 
@@ -102,7 +102,7 @@ test("copy and terminal actions wait for an annotation save", async () => {
   await waitFor(() => expect(finishCalls).toBe(1))
   expect(screen.getByRole("button", { name: "Add note" })).toBeDisabled()
   expect(screen.getByRole("button", { name: "Copy feedback" })).toBeDisabled()
-  expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled()
+  expect(screen.getByRole("button", { name: "Cancel review" })).toBeDisabled()
   expect(screen.getByRole("button", { name: /Finish review/i })).toBeDisabled()
   await act(async () => {
     completeFinish(json({

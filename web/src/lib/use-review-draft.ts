@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react"
-import type { SelectionRange } from "@/api/types"
+import type { Annotation, SelectionRange } from "@/api/types"
 import { emptyForm, type AnnotationFormValue } from "@/lib/review-utils"
 
 export function useReviewDraft(initialSelection: SelectionRange, initialFormSelection = initialSelection) {
@@ -35,6 +35,11 @@ export function useReviewDraft(initialSelection: SelectionRange, initialFormSele
       updateForm(emptyForm(submittedSelection))
     }
   }, [updateForm])
+  const reconcileSavedAnnotation = useCallback((id: string, saved: Annotation | undefined) => {
+    if (formRef.current.id !== id) return
+    if (saved == null) resetDraft(initialSelection, initialFormSelection)
+    else updateForm({ ...formRef.current, status: saved.status })
+  }, [initialFormSelection, initialSelection, resetDraft, updateForm])
 
-  return { selection, selectionRef, form, formRef, updateForm, resetDraft, selectLines, resetForm, clearSubmittedForm }
+  return { selection, selectionRef, form, formRef, updateForm, resetDraft, selectLines, resetForm, clearSubmittedForm, reconcileSavedAnnotation }
 }

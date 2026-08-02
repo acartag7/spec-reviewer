@@ -1,9 +1,7 @@
 import { useState } from "react"
 import type { Annotation, Review, ReviewComparison, ReviewDocument, ReviewSourceState, SelectionRange } from "@/api/types"
-import { AgentExport } from "@/components/AgentExport"
-import { AnnotationList } from "@/components/AnnotationList"
-import { AnnotationPanel } from "@/components/AnnotationPanel"
 import { ReaderPane } from "@/components/ReaderPane"
+import { ReviewSidebar } from "@/components/ReviewSidebar"
 import type { AnnotationFormValue } from "@/lib/review-utils"
 
 interface WorkspaceProps {
@@ -13,6 +11,7 @@ interface WorkspaceProps {
   sourceState: ReviewSourceState
   comparison: ReviewComparison
   form: AnnotationFormValue
+  summary: string
   exportMarkdown: string
   exportLoading: boolean
   saving: boolean
@@ -20,6 +19,8 @@ interface WorkspaceProps {
   onFormChange: (form: AnnotationFormValue) => void
   onFormSubmit: () => void
   onFormReset: () => void
+  onSummaryChange: (summary: string) => void
+  onSummarySave: () => void
   onEditAnnotation: (annotation: Annotation) => void
   onStatusAnnotation: (annotation: Annotation, status: Annotation["status"]) => void
   onDeleteAnnotation: (annotation: Annotation) => void
@@ -28,8 +29,13 @@ interface WorkspaceProps {
 
 export function Workspace(props: WorkspaceProps) {
   const [openRequest, setOpenRequest] = useState<{ documentPath: string; line: number } | null>(null)
+  const [selectionRequest, setSelectionRequest] = useState(0)
+  const selectLines = (selection: SelectionRange) => {
+    props.onSelection(selection)
+    setSelectionRequest((request) => request + 1)
+  }
   return (
-    <main className="grid h-[calc(100dvh-3.5rem)] min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_390px]">
+    <main className="grid h-[calc(100dvh-2.5rem)] min-h-0 grid-cols-1 grid-rows-[55%_45%] overflow-hidden bg-card md:grid-cols-[minmax(0,1fr)_minmax(320px,360px)] md:grid-rows-1">
       <ReaderPane
         document={props.document}
         review={props.review}
@@ -37,37 +43,32 @@ export function Workspace(props: WorkspaceProps) {
         sourceState={props.sourceState}
         comparison={props.comparison}
         openRequest={openRequest}
-        onSelect={props.onSelection}
+        onSelect={selectLines}
       />
-      <aside className="review-scroll grid min-h-0 gap-5 overflow-auto border-t bg-card p-4 lg:border-l lg:border-t-0">
-        <AnnotationPanel
-          form={props.form}
-          selection={props.selection}
-          saving={props.saving}
-          onChange={props.onFormChange}
-          onSubmit={props.onFormSubmit}
-          onReset={props.onFormReset}
-        />
-        <div className="border-t" />
-        <AnnotationList
-          annotations={props.review.annotations}
-          saving={props.saving}
-          onOpen={(annotation) => setOpenRequest({
-            documentPath: props.document.path,
-            line: annotation.anchor?.state === "moved" ? annotation.anchor.lineStart ?? annotation.lineStart : annotation.lineStart,
-          })}
-          onEdit={props.onEditAnnotation}
-          onStatus={props.onStatusAnnotation}
-          onDelete={props.onDeleteAnnotation}
-        />
-        <div className="border-t" />
-        <AgentExport
-          markdown={props.exportMarkdown}
-          loading={props.exportLoading}
-          annotations={props.review.annotations}
-          onCopy={props.onCopyExport}
-        />
-      </aside>
+      <ReviewSidebar
+        document={props.document}
+        review={props.review}
+        selection={props.selection}
+        form={props.form}
+        summary={props.summary}
+        exportMarkdown={props.exportMarkdown}
+        exportLoading={props.exportLoading}
+        saving={props.saving}
+        selectionRequest={selectionRequest}
+        onFormChange={props.onFormChange}
+        onFormSubmit={props.onFormSubmit}
+        onFormReset={props.onFormReset}
+        onSummaryChange={props.onSummaryChange}
+        onSummarySave={props.onSummarySave}
+        onOpenAnnotation={(annotation) => setOpenRequest({
+          documentPath: props.document.path,
+          line: annotation.anchor?.state === "moved" ? annotation.anchor.lineStart ?? annotation.lineStart : annotation.lineStart,
+        })}
+        onEditAnnotation={props.onEditAnnotation}
+        onStatusAnnotation={props.onStatusAnnotation}
+        onDeleteAnnotation={props.onDeleteAnnotation}
+        onCopyExport={props.onCopyExport}
+      />
     </main>
   )
 }

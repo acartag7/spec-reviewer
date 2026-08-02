@@ -1,35 +1,35 @@
 import { Copy } from "lucide-react"
 import type { Annotation } from "@/api/types"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
 import { anchorDriftSummary, anchorDriftText } from "@/lib/review-utils"
 
 interface AgentExportProps {
   markdown: string
   loading: boolean
+  disabled?: boolean
   annotations: Annotation[]
   onCopy: () => void
 }
 
-export function AgentExport({ markdown, loading, annotations, onCopy }: AgentExportProps) {
+export function AgentExport({ markdown, loading, disabled = false, annotations, onCopy }: AgentExportProps) {
   const drift = anchorDriftSummary(annotations)
 
   return (
-    <section className="grid gap-3">
-      <div className="font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground">Agent Export</div>
+    <section aria-labelledby="agent-export-heading" className="grid gap-3">
+      <div>
+        <h3 id="agent-export-heading" className="text-xs font-medium">Agent handoff</h3>
+        <p className="mt-1 text-[11px] leading-4 text-muted-foreground">Exact Markdown returned to the waiting agent.</p>
+      </div>
       {drift.total > 0 ? (
-        <div role="alert" className="rounded-lg border border-sev-major/35 bg-sev-major/10 px-3 py-2 text-sm">
+        <div role="alert" className="border-l-2 border-sev-major bg-sev-major/10 px-3 py-2 text-sm">
           Review anchors before copying export: {anchorDriftText(drift)}.
         </div>
       ) : null}
-      <Textarea
-        rows={12}
-        readOnly
-        value={loading ? "Loading export..." : markdown}
-        className="min-h-64 resize-y font-mono text-xs leading-5"
-      />
+      <pre role="region" tabIndex={0} aria-label="Agent export Markdown" className="review-scroll max-h-[calc(100dvh-13rem)] min-h-72 overflow-auto whitespace-pre-wrap border bg-background/75 p-3 font-mono text-[11px] leading-5 text-foreground">
+        {loading ? "Loading export..." : markdown}
+      </pre>
       <div className="flex justify-end">
-        <Button type="button" variant="outline" onClick={onCopy}>
+        <Button type="button" onClick={onCopy} disabled={loading || disabled}>
           <Copy />
           Copy
         </Button>

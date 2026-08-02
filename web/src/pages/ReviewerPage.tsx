@@ -8,17 +8,18 @@ import { SessionOutcomeScreen } from "@/components/SessionOutcomeScreen"
 import { StatusToast } from "@/components/StatusToast"
 import { TopBar } from "@/components/TopBar"
 import { Workspace } from "@/components/Workspace"
-import { createAnnotation, formFromAnnotation, removeAnnotation, upsertAnnotation } from "@/lib/review-utils"
+import { createAnnotation, formFromAnnotation, hasAnnotationDraft, removeAnnotation, upsertAnnotation } from "@/lib/review-utils"
 import type { AnnotationFormValue } from "@/lib/review-utils"
 import { isMarkdownFile } from "@/lib/path-utils"
 import { NO_SELECTION } from "@/lib/selection-utils"
 import { recoverFailedSave } from "@/lib/save-recovery"
 import { useActiveReviewTime } from "@/lib/use-active-review-time"
 import { useReviewDraft } from "@/lib/use-review-draft"
+import { useReviewSummary } from "@/lib/use-review-summary"
 import { useTerminalReview } from "@/lib/use-terminal-review"
 
 const initialSelection: SelectionRange = { lineStart: 1, lineEnd: 1, selectedText: "" }
-type SaveIntent = { review: Review; submittedForm: AnnotationFormValue; submittedSelection: SelectionRange; clearFormOnSuccess: boolean }
+type SaveIntent = { review: Review; submittedForm: AnnotationFormValue; submittedSelection: SelectionRange; submittedSummary: string | null; clearFormOnSuccess: boolean; reconcileFormId: string | null }
 export function ReviewerPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
@@ -28,7 +29,8 @@ export function ReviewerPage() {
   const requestedPath = searchParams.get("path") ?? ""
   const [document, setDocument] = useState<ReviewDocument | null>(null)
   const [review, setReview] = useState<Review | null>(null)
-  const { selection, selectionRef, form, formRef, updateForm, resetDraft, selectLines, clearSubmittedForm } = useReviewDraft(NO_SELECTION, initialSelection)
+  const { selection, selectionRef, form, formRef, updateForm, resetDraft, selectLines, clearSubmittedForm, reconcileSavedAnnotation } = useReviewDraft(NO_SELECTION, initialSelection)
+  const { summary, summaryRef, updateSummary, settleSubmittedSummary } = useReviewSummary()
   const [sourceState, setSourceState] = useState<ReviewSourceState>("unreviewed")
   const [comparison, setComparison] = useState<ReviewComparison>({ state: "unavailable", reason: "no-baseline" })
   const [status, setStatus] = useState("")
@@ -64,10 +66,13 @@ export function ReviewerPage() {
     setDocument(result.document)
     setReview(result.review)
     confirmedReviewRef.current = result.review
-    if (shouldResetDraft) resetDraft(NO_SELECTION, initialSelection)
+    if (shouldResetDraft) {
+      resetDraft(NO_SELECTION, initialSelection)
+      updateSummary(result.review.summary)
+    }
     setSourceState(result.sourceState ?? (result.stale ? "changed" : "current"))
     setComparison(result.comparison ?? { state: "unavailable", reason: "no-baseline" })
-  }, [resetDraft])
+  }, [resetDraft, updateSummary])
   useEffect(() => {
     if (requestedPath === "" && configQuery.data?.defaultDocumentPath) {
       setSearchParams({ path: configQuery.data.defaultDocumentPath }, { replace: true })
@@ -98,25 +103,30 @@ export function ReviewerPage() {
       setReview(saved)
       confirmedReviewRef.current = saved
       if (intent.clearFormOnSuccess) clearSubmittedForm(intent.submittedForm, intent.submittedSelection)
+      if (intent.reconcileFormId != null) reconcileSavedAnnotation(intent.reconcileFormId, saved.annotations.find((item) => item.id === intent.reconcileFormId))
+      if (intent.submittedSummary != null) settleSubmittedSummary(intent.submittedSummary, saved.summary)
       setSourceState((state) => (state === "changed" ? "changed" : "current"))
       void queryClient.invalidateQueries({ queryKey: ["reviews"] })
       void queryClient.invalidateQueries({ queryKey: ["export", document?.path] })
       showStatus("Saved")
     },
-    onError: async (error) => {
+    onError: async (error, intent) => {
+      const confirmedSummary = confirmedReviewRef.current?.summary
       const reloaded = await recoverFailedSave(
         document?.path ?? null,
         confirmedReviewRef.current,
         setReview,
-        (result) => applyOpenResult(result, false),
+        (result) => {
+          if (confirmedSummary != null && summaryRef.current === confirmedSummary) updateSummary(result.review.summary)
+          if (intent.reconcileFormId != null) reconcileSavedAnnotation(intent.reconcileFormId, result.review.annotations.find((item) => item.id === intent.reconcileFormId))
+          applyOpenResult(result, false)
+        },
       )
       if (reloaded && document != null) void queryClient.invalidateQueries({ queryKey: ["export", document.path] })
       const message = error instanceof Error ? error.message : String(error)
       showStatus(`${message}. ${reloaded ? "Reloaded the saved review" : "Unsaved change reverted; reload before saving again"}`)
     },
-    onSettled: () => {
-      saveInFlightRef.current = false
-    },
+    onSettled: () => { saveInFlightRef.current = false },
   })
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -138,19 +148,21 @@ export function ReviewerPage() {
     }
     setSearchParams({ path: path.trim() }, { replace: true })
   }
-
-  function saveReview(nextReview: Review, clearFormOnSuccess = false) {
+  function saveReview(nextReview: Review, clearFormOnSuccess = false, summaryToSave?: string, reconcileFormId?: string) {
     if (saveInFlightRef.current || terminal.isInFlight()) return showStatus("Wait for the pending operation")
-    setReview(nextReview)
+    const submittedSummary = summaryToSave ?? null
+    const submittedReview = { ...nextReview, summary: summaryToSave ?? nextReview.summary }
+    setReview(submittedReview)
     saveInFlightRef.current = true
     saveMutation.mutate({
-      review: nextReview,
+      review: submittedReview,
       submittedForm: formRef.current,
       submittedSelection: selectionRef.current,
+      submittedSummary,
       clearFormOnSuccess,
+      reconcileFormId: reconcileFormId ?? null,
     })
   }
-
   function addOrUpdateAnnotation() {
     if (review == null) return showStatus("Open a document first")
     const annotation = createAnnotation(form, selection)
@@ -160,20 +172,21 @@ export function ReviewerPage() {
     }
     saveReview(upsertAnnotation(review, annotation), true)
   }
-
   function deleteAnnotation(annotation: Annotation) {
     if (review == null) return
-    saveReview(removeAnnotation(review, annotation.id))
+    saveReview(removeAnnotation(review, annotation.id), false, undefined, annotation.id)
   }
 
   function setAnnotationStatus(annotation: Annotation, status: Annotation["status"]) {
     if (review == null) return
-    saveReview(upsertAnnotation(review, { ...annotation, status, updatedAt: new Date().toISOString() }))
+    saveReview(upsertAnnotation(review, { ...annotation, status, updatedAt: new Date().toISOString() }), false, undefined, annotation.id)
   }
 
+  const hasUnsavedWork = (review != null && hasAnnotationDraft(form, review.annotations)) || (review != null && summary !== review.summary)
   async function copyExport() {
     if (document == null) return showStatus("Open a document first")
     if (saveInFlightRef.current || terminal.isInFlight()) return showStatus("Wait for the pending operation")
+    if (hasUnsavedWork) return showStatus("Save or clear your draft before copying feedback")
     const result = await exportQuery.refetch()
     const markdown = result.data?.markdown ?? exportQuery.data?.markdown ?? ""
     try {
@@ -189,32 +202,25 @@ export function ReviewerPage() {
   const canCopy = document != null && !reviewLocked
   const sessionPath = configQuery.data?.defaultDocumentPath ?? null
   const canFinish = document != null && document.path === sessionPath && !reviewLocked
+  const finishReview = () => hasUnsavedWork ? showStatus("Save or clear your draft before finishing") : terminal.finish()
 
-  if (terminal.outcome != null) {
-    return <SessionOutcomeScreen outcome={terminal.outcome.outcome} openAnnotations={terminal.outcome.openAnnotations} activeMs={terminal.outcome.activeMs} />
-  }
+  if (terminal.outcome != null) return <SessionOutcomeScreen outcome={terminal.outcome.outcome} openAnnotations={terminal.outcome.openAnnotations} activeMs={terminal.outcome.activeMs} />
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
       <TopBar
-        path={document?.path ?? requestedPath}
-        sourceState={sourceState}
-        canCopy={canCopy}
-        canFinish={canFinish}
+        path={document?.path ?? requestedPath} sourceState={sourceState}
+        canCopy={canCopy} canFinish={canFinish}
         waitForReview={configQuery.data?.waitForReview ?? false}
         finishing={reviewLocked}
-        onCopy={copyExport}
-        onFinish={terminal.finish}
-        onCancel={terminal.cancel}
+        openNotes={review?.annotations.filter((item) => item.status === "open").length ?? 0}
+        onCopy={copyExport} onFinish={finishReview} onCancel={terminal.cancel}
       />
       {document != null && review != null ? (
         <Workspace
-          document={document}
-          review={review}
-          selection={selection}
-          sourceState={sourceState}
-          comparison={comparison}
-          form={form}
+          document={document} review={review} selection={selection}
+          sourceState={sourceState} comparison={comparison}
+          form={form} summary={summary}
           exportMarkdown={exportQuery.data?.markdown ?? ""}
           exportLoading={exportQuery.isLoading || exportQuery.isFetching}
           saving={reviewLocked}
@@ -222,6 +228,8 @@ export function ReviewerPage() {
           onFormChange={updateForm}
           onFormSubmit={addOrUpdateAnnotation}
           onFormReset={() => { window.getSelection()?.removeAllRanges(); resetDraft(NO_SELECTION, initialSelection) }}
+          onSummaryChange={updateSummary}
+          onSummarySave={() => saveReview(review, false, summaryRef.current)}
           onEditAnnotation={(annotation) => updateForm(formFromAnnotation(annotation))}
           onStatusAnnotation={setAnnotationStatus}
           onDeleteAnnotation={deleteAnnotation}

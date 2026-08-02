@@ -76,7 +76,7 @@ test("Rendered marks exact changed items without leaking its label into selected
   expect(changedItem?.tagName).toBe("LI")
   expect(screen.getByText("Changed", { selector: ".rendered-change-label" })).toBeInTheDocument()
   expect(changedItem?.closest(".markdown-block")).not.toHaveAttribute("data-change")
-  expect(screen.getAllByRole("heading", { name: "Title" })[1]?.closest("[data-change]"))
+  expect(screen.getAllByRole("heading", { name: "Title" })[0]?.closest("[data-change]"))
     .toBeNull()
   const range = document.createRange()
   range.selectNodeContents(changedItem!)
@@ -108,7 +108,7 @@ test("Rendered marks exact changed items without leaking its label into selected
     />,
   )
   fireEvent.click(screen.getByRole("tab", { name: "Rendered" }))
-  const headingBlock = screen.getAllByRole("heading", { name: "Title" })[1]?.closest(".markdown-block")
+  const headingBlock = screen.getAllByRole("heading", { name: "Title" })[0]?.closest(".markdown-block")
   expect(headingBlock).toHaveClass("selected", "changed")
   expect(headingBlock?.querySelector(".rendered-change-label")).toHaveTextContent("Changed")
 })
@@ -143,6 +143,7 @@ test("opening an annotation switches from Changes before scrolling to its render
       sourceState="changed"
       comparison={changedComparison}
       form={emptyForm(selection)}
+      summary=""
       exportMarkdown=""
       exportLoading={false}
       saving={false}
@@ -150,6 +151,8 @@ test("opening an annotation switches from Changes before scrolling to its render
       onFormChange={vi.fn()}
       onFormSubmit={vi.fn()}
       onFormReset={vi.fn()}
+      onSummaryChange={vi.fn()}
+      onSummarySave={vi.fn()}
       onEditAnnotation={vi.fn()}
       onStatusAnnotation={vi.fn()}
       onDeleteAnnotation={vi.fn()}
@@ -158,12 +161,31 @@ test("opening an annotation switches from Changes before scrolling to its render
   )
   expect(screen.getByRole("tab", { name: /Changes/ })).toHaveAttribute("aria-selected", "true")
   expect(document.querySelector('[data-source-line="1"]')).toBeNull()
+  fireEvent.click(screen.getByRole("tab", { name: /Notes/ }))
   fireEvent.click(screen.getByText("Unchanged line note"))
 
   await waitFor(() => expect(screen.getByRole("tab", { name: "Rendered" })).toHaveAttribute("aria-selected", "true"))
   await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "smooth" }))
   fireEvent.click(screen.getByRole("tab", { name: /Changes/ }))
   await waitFor(() => expect(screen.getByRole("tab", { name: /Changes/ })).toHaveAttribute("aria-selected", "true"))
+})
+
+test("selecting the same source range again returns the sidebar to Feedback", () => {
+  const selection = { lineStart: 3, lineEnd: 3, selectedText: "- Open local file." }
+  render(
+    <Workspace
+      document={documentFixture} review={reviewFixture} selection={selection}
+      sourceState="current" comparison={{ state: "unavailable", reason: "no-baseline" }}
+      form={emptyForm(selection)} summary="" exportMarkdown="" exportLoading={false} saving={false}
+      onSelection={vi.fn()} onFormChange={vi.fn()} onFormSubmit={vi.fn()} onFormReset={vi.fn()}
+      onSummaryChange={vi.fn()} onSummarySave={vi.fn()} onEditAnnotation={vi.fn()}
+      onStatusAnnotation={vi.fn()} onDeleteAnnotation={vi.fn()} onCopyExport={vi.fn()}
+    />,
+  )
+  fireEvent.click(screen.getByRole("tab", { name: /Notes/ }))
+  expect(screen.getByRole("tab", { name: /Notes/ })).toHaveAttribute("aria-selected", "true")
+  fireEvent.click(screen.getByText("Open local file."))
+  expect(screen.getByRole("tab", { name: "Feedback" })).toHaveAttribute("aria-selected", "true")
 })
 
 const changedComparison = {

@@ -23,11 +23,6 @@ export const kinds: Array<{ value: AnnotationKind; label: string }> = [
   { value: "note", label: "Note" },
 ]
 
-export const statuses: Array<{ value: AnnotationStatus; label: string }> = [
-  { value: "open", label: "Open" },
-  { value: "resolved", label: "Resolved" },
-]
-
 export interface AnnotationFormValue {
   id: string
   createdAt: string
@@ -39,6 +34,19 @@ export interface AnnotationFormValue {
   status: AnnotationStatus
   note: string
   agentAction: string
+}
+
+export function hasAnnotationDraft(form: AnnotationFormValue, annotations: Annotation[]): boolean {
+  if (form.id === "") return form.note.trim() !== "" || form.agentAction.trim() !== ""
+  const saved = annotations.find((annotation) => annotation.id === form.id)
+  if (saved == null) return true
+  return form.lineStart !== saved.lineStart
+    || form.lineEnd !== saved.lineEnd
+    || form.severity !== saved.severity
+    || form.kind !== saved.kind
+    || form.status !== saved.status
+    || form.note.trim() !== saved.note
+    || form.agentAction.trim() !== saved.agentAction
 }
 
 export interface AnchorDriftSummary {
