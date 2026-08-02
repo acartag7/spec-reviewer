@@ -17,6 +17,7 @@ interface TopBarProps {
   path: string
   sourceState: ReviewSourceState
   canCopy: boolean
+  canFinish: boolean
   waitForReview: boolean
   finishing: boolean
   onCopy: () => void
@@ -24,7 +25,7 @@ interface TopBarProps {
   onCancel: () => void
 }
 
-export function TopBar({ path, sourceState, canCopy, waitForReview, finishing, onCopy, onFinish, onCancel }: TopBarProps) {
+export function TopBar({ path, sourceState, canCopy, canFinish, waitForReview, finishing, onCopy, onFinish, onCancel }: TopBarProps) {
   return (
     <header className="flex min-h-14 items-center gap-3 border-b bg-background px-4">
       <div className="flex min-w-fit items-center gap-2 font-heading text-sm font-semibold">
@@ -46,7 +47,7 @@ export function TopBar({ path, sourceState, canCopy, waitForReview, finishing, o
             <XCircle />
             Cancel
           </Button>
-          <Button type="button" size="sm" onClick={onFinish} disabled={!canCopy || finishing}>
+          <Button type="button" size="sm" onClick={onFinish} disabled={!canFinish || finishing}>
             <CheckCircle2 />
             Finish review
           </Button>

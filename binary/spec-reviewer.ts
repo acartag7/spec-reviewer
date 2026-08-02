@@ -2,7 +2,9 @@ import app from "../dist/index.html";
 import { loadConfig, type AppConfig } from "../src/config.ts";
 import { createReviewerService } from "../src/application/app-factory.ts";
 import { ReviewSessionWaiter, type ReviewCompletion } from "../src/application/review-session.ts";
+import { AppError, publicError } from "../src/domain/errors.ts";
 import { secureHeaders } from "../src/interfaces/http/security.ts";
+import { readActiveTime, readReviewDraft, readSessionAction } from "../src/interfaces/http/actions.ts";
 import { readUpload, storeUploadedMarkdown } from "../src/interfaces/http/uploads.ts";
 import { openUrl } from "../src/cli/open-url.ts";
 import { runSkillCommand } from "../src/cli/skill-installer.ts";
@@ -43,8 +45,8 @@ async function main(): Promise<number> {
     if (config.openBrowser) openUrl(url);
     if (waitSession == null) return 0;
     const completion = await waitSession.wait();
-    await server.stop(true);
-    await assetServer.stop(true);
+    await server.stop(false);
+    await assetServer.stop(false);
     return printCompletion(config, completion);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
@@ -68,7 +70,8 @@ async function routeRequest(
     }
     return await fetchAsset(assetServer, url);
   } catch (error) {
-    return json(errorPayload(error), errorStatus(error));
+    const response = publicError(error);
+    return json(response.body, response.status);
   }
 }
 
@@ -96,7 +99,7 @@ async function routeApi(
     return json(await service.openDocument(path));
   }
   if (request.method === "POST" && url.pathname === "/api/review") {
-    return json(await service.saveReview(readDraft(await readJson(request))));
+    return json(await service.saveReview(readReviewDraft(await readJson(request))));
   }
   if (request.method === "GET" && url.pathname === "/api/export") {
     return json(await service.exportReview(requirePath(url)));
@@ -107,24 +110,24 @@ async function routeApi(
     return json({ ok: true });
   }
   if (request.method === "POST" && url.pathname === "/api/session/finish") {
-    if (waitSession == null) return json({ error: { message: "No waiting review session" } }, 409);
+    if (waitSession == null) throw new AppError("invalid_request", 409, "No waiting review session");
     const action = readSessionAction(await readJson(request));
-    if (waitSession.status === "waiting" && action.activeMsDelta != null) {
-      await service.addActiveTime(action.path, action.activeMsDelta);
-    }
-    const exported = await service.exportReview(action.path);
-    return json(waitSession.finish(action.path, exported.markdown, exported.openAnnotations, exported.carriedOver, exported.activeMs));
+    const path = service.resolveDocumentPath(action.path);
+    return json(await waitSession.runTerminal(path, action.activeMsDelta, async (delta) => {
+      const exported = await service.finishReview(path, delta);
+      return { status: "finished" as const, path, ...exported };
+    }));
   }
   if (request.method === "POST" && url.pathname === "/api/session/cancel") {
-    if (waitSession == null) return json({ error: { message: "No waiting review session" } }, 409);
+    if (waitSession == null) throw new AppError("invalid_request", 409, "No waiting review session");
     const action = readSessionAction(await readJson(request));
-    if (waitSession.status === "waiting" && action.activeMsDelta != null) {
-      await service.addActiveTime(action.path, action.activeMsDelta);
-    }
-    const exported = await service.exportReview(action.path);
-    return json(waitSession.cancel(action.path, action.reason, exported.activeMs));
+    const path = service.resolveDocumentPath(action.path);
+    return json(await waitSession.runTerminal(path, action.activeMsDelta, async (delta) => {
+      const activeMs = await service.cancelReview(path, delta);
+      return { status: "canceled" as const, path, reason: action.reason, activeMs };
+    }));
   }
-  return json({ error: { message: "Not found" } }, 404);
+  throw new AppError("not_found", 404, "Not found");
 }
 
 async function fetchAsset(assetServer: BunServer, url: URL): Promise<Response> {
@@ -136,29 +139,38 @@ async function fetchAsset(assetServer: BunServer, url: URL): Promise<Response> {
 }
 
 async function readJson(request: Request): Promise<unknown> {
-  const raw = await request.text();
-  if (Buffer.byteLength(raw, "utf8") > maxJsonBytes) throw new Error("JSON body is too large");
-  return raw.trim() === "" ? {} : JSON.parse(raw);
-}
-
-function readDraft(value: unknown): { path: string; summary?: unknown; annotations?: unknown; activeMsDelta?: unknown } {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("request body must be an object");
-  const record = value as Record<string, unknown>;
-  if (typeof record.path !== "string" || record.path.trim() === "") throw new Error("path is required");
-  return { path: record.path, summary: record.summary, annotations: record.annotations, activeMsDelta: record.activeMsDelta };
-}
-
-function readSessionAction(value: unknown): { path: string; reason: string | null; activeMsDelta?: unknown } {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("request body must be an object");
-  const record = value as Record<string, unknown>;
-  if (typeof record.path !== "string" || record.path.trim() === "") throw new Error("path is required");
-  const reason = typeof record.reason === "string" && record.reason.trim() !== "" ? record.reason.trim() : null;
-  return { path: record.path, reason, activeMsDelta: record.activeMsDelta };
+  const declared = request.headers.get("content-length");
+  if (declared != null && Number(declared) > maxJsonBytes) {
+    throw new AppError("invalid_request", 400, "JSON body is too large");
+  }
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  const reader = request.body?.getReader();
+  if (reader != null) {
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > maxJsonBytes) throw new AppError("invalid_request", 400, "JSON body is too large");
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+  const raw = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8");
+  if (raw.trim() === "") return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new AppError("invalid_json", 400, "JSON body is malformed");
+  }
 }
 
 function requirePath(url: URL): string {
   const path = url.searchParams.get("path");
-  if (path == null || path.trim() === "") throw new Error("path is required");
+  if (path == null || path.trim() === "") throw new AppError("invalid_request", 400, "path is required");
   return path;
 }
 
@@ -246,22 +258,6 @@ function printCompletion(config: AppConfig, completion: ReviewCompletion): numbe
   if (config.jsonOutput) console.log(JSON.stringify(completion));
   else console.log(completion.markdown);
   return 0;
-}
-
-function errorPayload(error: unknown): { error: { message: string } } {
-  return { error: { message: error instanceof Error ? error.message : String(error) } };
-}
-
-function errorStatus(error: unknown): number {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes("not found") || message.includes("ENOENT") ? 404 : 400;
-}
-
-function readActiveTime(value: unknown): { path: string; activeMsDelta: unknown } {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("request body must be an object");
-  const record = value as Record<string, unknown>;
-  if (typeof record.path !== "string" || record.path.trim() === "") throw new Error("path is required");
-  return { path: record.path, activeMsDelta: record.activeMsDelta };
 }
 
 function formatMs(ms: number): string {

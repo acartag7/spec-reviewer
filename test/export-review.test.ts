@@ -16,6 +16,8 @@ test("exportReviewMarkdown emits agent-ready grouped feedback", () => {
     ],
     createdAt: "2026-06-13T00:00:00.000Z",
     updatedAt: "2026-06-13T00:00:00.000Z",
+    revision: 0,
+    metrics: { activeMs: 0 },
   };
 
   const markdown = exportReviewMarkdown(document, review);
@@ -27,25 +29,31 @@ test("exportReviewMarkdown emits agent-ready grouped feedback", () => {
   assert.doesNotMatch(markdown, /Wrong product boundary/);
 });
 
-test("exportReviewMarkdown cleans old selected text line numbers", () => {
-  const document = parseMarkdownDocument("/tmp/spec.md", "# Spec\nBody\n");
+test("exportReviewMarkdown preserves exact source indentation and numbers", () => {
+  const source = "- Retry policy\n    - 3 retries before failing\n    - Timeout is 30 - seconds";
+  const document = parseMarkdownDocument("/tmp/spec.md", `# Spec\n${source}\n`);
   const review: Review = {
     documentPath: document.path,
     documentDigest: document.digest,
     summary: "",
     annotations: [{
-      ...annotation("a1", 2, "major", "issue", "Line number pollution"),
-      selectedText: "90\n- first point\n91\n- second point 92 - third point",
+      ...annotation("a1", 2, "major", "issue", "Preserve source evidence"),
+      selectedText: "unverified flattened client quote",
+      anchor: { state: "ok", lineStart: 2, lineEnd: 4, sourceText: source },
+      anchorState: "ok",
     }],
     createdAt: "2026-06-13T00:00:00.000Z",
     updatedAt: "2026-06-13T00:00:00.000Z",
+    revision: 0,
+    metrics: { activeMs: 0 },
   };
 
   const markdown = exportReviewMarkdown(document, review);
 
-  assert.match(markdown, /- first point - second point - third point/);
-  assert.doesNotMatch(markdown, /91 - second/);
-  assert.doesNotMatch(markdown, /90 - first/);
+  assert.match(markdown, /Selected text \(exact\):/);
+  assert.match(markdown, /    - Retry policy\n        - 3 retries before failing\n        - Timeout is 30 - seconds/);
+  assert.doesNotMatch(markdown, /Timeout is - seconds/);
+  assert.doesNotMatch(markdown, /unverified flattened client quote/);
 });
 
 test("exportReviewMarkdown warns when review digest is stale", () => {
@@ -57,6 +65,8 @@ test("exportReviewMarkdown warns when review digest is stale", () => {
     annotations: [annotation("a1", 2, "major", "issue", "Check stale line")],
     createdAt: "2026-06-13T00:00:00.000Z",
     updatedAt: "2026-06-13T00:00:00.000Z",
+    revision: 0,
+    metrics: { activeMs: 0 },
   };
 
   const markdown = exportReviewMarkdown(document, review);
@@ -81,6 +91,8 @@ test("exportReviewMarkdown marks moved anchors and omits stale selected text", (
     }],
     createdAt: "2026-06-13T00:00:00.000Z",
     updatedAt: "2026-06-13T00:00:00.000Z",
+    revision: 0,
+    metrics: { activeMs: 0 },
   };
 
   const markdown = exportReviewMarkdown(document, review);
@@ -92,7 +104,7 @@ test("exportReviewMarkdown marks moved anchors and omits stale selected text", (
   assert.doesNotMatch(markdown, /Selected text: Old selected text/);
 });
 
-test("exportReviewMarkdown excludes not-found prior-pass notes, keeps current-version notes", () => {
+test("exportReviewMarkdown keeps not-found prior-pass notes actionable", () => {
   const document = parseMarkdownDocument("/tmp/spec.md", "# Spec\nKept line\n");
   const review: Review = {
     documentPath: document.path,
@@ -110,15 +122,17 @@ test("exportReviewMarkdown excludes not-found prior-pass notes, keeps current-ve
     ],
     createdAt: "2026-06-13T00:00:00.000Z",
     updatedAt: "2026-06-13T00:00:00.000Z",
+    revision: 0,
+    metrics: { activeMs: 0 },
   };
 
   const markdown = exportReviewMarkdown(document, review);
 
   assert.match(markdown, /## Required Changes/);
   assert.match(markdown, /Still here/);
-  assert.doesNotMatch(markdown, /Check missing line/);
+  assert.match(markdown, /Check missing line/);
   assert.doesNotMatch(markdown, /## Carried Over/);
-  assert.doesNotMatch(markdown, /\(anchor not found\)/);
+  assert.match(markdown, /\(anchor not found\)/);
 });
 
 test("exportReviewMarkdown keeps a not-found anchor actionable when the review is current", () => {
@@ -134,6 +148,8 @@ test("exportReviewMarkdown keeps a not-found anchor actionable when the review i
     }],
     createdAt: "2026-06-13T00:00:00.000Z",
     updatedAt: "2026-06-13T00:00:00.000Z",
+    revision: 0,
+    metrics: { activeMs: 0 },
   };
 
   const markdown = exportReviewMarkdown(document, review);
@@ -143,7 +159,24 @@ test("exportReviewMarkdown keeps a not-found anchor actionable when the review i
   assert.doesNotMatch(markdown, /## Carried Over/);
 });
 
-test("reviewExportCounts splits live and carried-over open annotations", () => {
+test("legacy selected text without an anchor gets one accurate warning", () => {
+  const document = parseMarkdownDocument("/tmp/spec.md", "# Spec\nCurrent\n");
+  const review: Review = {
+    documentPath: document.path,
+    documentDigest: document.digest,
+    summary: "",
+    annotations: [{ ...annotation("legacy", 2, "major", "issue", "Check manually"), selectedText: "Legacy quote" }],
+    createdAt: "2026-06-13T00:00:00.000Z",
+    updatedAt: "2026-06-13T00:00:00.000Z",
+    revision: 0,
+    metrics: { activeMs: 0 },
+  };
+  const markdown = exportReviewMarkdown(document, review);
+  assert.match(markdown, /no server-owned source anchor is available/);
+  assert.doesNotMatch(markdown, /saved anchor is stale/);
+});
+
+test("reviewExportCounts keeps every unresolved annotation open", () => {
   const document = parseMarkdownDocument("/tmp/spec.md", "# Spec\nKept line\n");
   const review: Review = {
     documentPath: document.path,
@@ -167,12 +200,14 @@ test("reviewExportCounts splits live and carried-over open annotations", () => {
     ],
     createdAt: "2026-06-13T00:00:00.000Z",
     updatedAt: "2026-06-13T00:00:00.000Z",
+    revision: 0,
+    metrics: { activeMs: 0 },
   };
 
   const counts = reviewExportCounts(document, review);
 
-  assert.equal(counts.openAnnotations, 1);
-  assert.equal(counts.carriedOver, 2);
+  assert.equal(counts.openAnnotations, 3);
+  assert.equal(counts.carriedOver, 0);
 });
 
 function annotation(id: string, line: number, severity: Review["annotations"][number]["severity"], kind: Review["annotations"][number]["kind"], note: string) {

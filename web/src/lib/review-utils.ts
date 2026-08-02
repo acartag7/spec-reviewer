@@ -3,6 +3,7 @@ import type {
   AnnotationAnchorState,
   AnnotationKind,
   AnnotationSeverity,
+  AnnotationStatus,
   Review,
   SelectionRange,
 } from "@/api/types"
@@ -22,6 +23,11 @@ export const kinds: Array<{ value: AnnotationKind; label: string }> = [
   { value: "note", label: "Note" },
 ]
 
+export const statuses: Array<{ value: AnnotationStatus; label: string }> = [
+  { value: "open", label: "Open" },
+  { value: "resolved", label: "Resolved" },
+]
+
 export interface AnnotationFormValue {
   id: string
   createdAt: string
@@ -30,11 +36,14 @@ export interface AnnotationFormValue {
   selectedText: string
   severity: AnnotationSeverity
   kind: AnnotationKind
+  status: AnnotationStatus
   note: string
+  agentAction: string
 }
 
 export interface AnchorDriftSummary {
   moved: number
+  ambiguous: number
   notFound: number
   total: number
 }
@@ -48,7 +57,9 @@ export function emptyForm(selection: SelectionRange): AnnotationFormValue {
     selectedText: selection.selectedText,
     severity: "major",
     kind: "issue",
+    status: "open",
     note: "",
+    agentAction: "",
   }
 }
 
@@ -58,10 +69,12 @@ export function formFromAnnotation(annotation: Annotation): AnnotationFormValue 
     createdAt: annotation.createdAt,
     lineStart: annotation.lineStart,
     lineEnd: annotation.lineEnd,
-    selectedText: annotation.selectedText ?? "",
+    selectedText: annotation.anchor?.state === "ok" ? annotation.anchor.sourceText ?? "" : "",
     severity: annotation.severity,
     kind: annotation.kind,
+    status: annotation.status,
     note: annotation.note,
+    agentAction: annotation.agentAction,
   }
 }
 
@@ -72,12 +85,12 @@ export function createAnnotation(form: AnnotationFormValue, selection: Selection
     lineStart: Number(form.lineStart || selection.lineStart || 1),
     lineEnd: Number(form.lineEnd || selection.lineEnd || form.lineStart || 1),
     section: null,
-    selectedText: form.selectedText.trim() || selection.selectedText || null,
+    selectedText: null,
     kind: form.kind,
     severity: form.severity,
-    status: "open",
+    status: form.status,
     note: form.note.trim(),
-    agentAction: "",
+    agentAction: form.agentAction.trim(),
     createdAt: form.createdAt || now,
     updatedAt: now,
   }
@@ -136,17 +149,19 @@ export function anchorDriftSummary(annotations: Annotation[]): AnchorDriftSummar
     (summary, annotation) => {
       const state = annotationAnchorState(annotation)
       if (state === "moved") summary.moved += 1
+      if (state === "ambiguous") summary.ambiguous += 1
       if (state === "not-found") summary.notFound += 1
-      summary.total = summary.moved + summary.notFound
+      summary.total = summary.moved + summary.ambiguous + summary.notFound
       return summary
     },
-    { moved: 0, notFound: 0, total: 0 },
+    { moved: 0, ambiguous: 0, notFound: 0, total: 0 },
   )
 }
 
 export function anchorDriftText(summary: AnchorDriftSummary): string {
   const parts = [
     summary.moved > 0 ? `${summary.moved} moved` : "",
+    summary.ambiguous > 0 ? `${summary.ambiguous} ambiguous` : "",
     summary.notFound > 0 ? `${summary.notFound} not found` : "",
   ].filter(Boolean)
   return parts.join(", ")

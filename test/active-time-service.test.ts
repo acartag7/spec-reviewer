@@ -21,11 +21,13 @@ async function freshService(): Promise<{ service: ReviewerService; store: JsonRe
 // write it back, losing the just-saved annotations (or vice-versa for the metric).
 test("concurrent saveReview and addActiveTime both persist (no lost updates)", async () => {
   const { service, store, docPath } = await freshService();
+  let revision = 0;
   for (let i = 0; i < 20; i++) {
-    await Promise.all([
-      service.saveReview({ path: docPath, annotations: [{ lineStart: 1, lineEnd: 1, kind: "note", severity: "note", note: `n${i}` }], activeMsDelta: 1000 }),
+    const [saved] = await Promise.all([
+      service.saveReview({ path: docPath, baseRevision: revision, annotations: [{ lineStart: 1, lineEnd: 1, kind: "note", severity: "note", note: `n${i}` }], activeMsDelta: 1000 }),
       service.addActiveTime(docPath, 500),
     ]);
+    revision = saved.revision;
     const review = await store.load(docPath);
     assert.notEqual(review, null);
     assert.equal(review!.annotations.length, 1, `iter ${i}: annotation lost to a racing write`);
@@ -43,4 +45,11 @@ test("addActiveTime persists a review for a read-only session", async () => {
   assert.notEqual(stored, null);
   assert.equal(stored!.metrics.activeMs, 45000);
   assert.equal(stored!.annotations.length, 0);
+});
+
+test("a zero active-time delta does not materialize an empty review", async () => {
+  const { service, store, docPath } = await freshService();
+  const result = await service.addActiveTime(docPath, 0);
+  assert.equal(result.metrics.activeMs, 0);
+  assert.equal(await store.load(docPath), null);
 });

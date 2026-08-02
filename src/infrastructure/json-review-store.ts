@@ -1,8 +1,13 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { pathKey } from "../domain/ids.ts";
+import { AppError, isErrno } from "../domain/errors.ts";
 import type { Review } from "../domain/review.ts";
+import { parseStoredReview } from "../domain/stored-review.ts";
 import type { ReviewStore, StoredReviewSummary } from "../application/ports.ts";
+import { atomicWritePrivateFile } from "./atomic-file.ts";
+
+const MAX_STORED_REVIEW_BYTES = 16 * 1024 * 1024;
 
 export class JsonReviewStore implements ReviewStore {
   private readonly storageDir: string;
@@ -13,31 +18,30 @@ export class JsonReviewStore implements ReviewStore {
 
   async load(documentPath: string): Promise<Review | null> {
     try {
-      const raw = await readFile(this.filePath(documentPath), "utf8");
-      return ensureMetrics(JSON.parse(raw) as Review);
+      return await this.readStored(`${pathKey(documentPath)}.json`, documentPath);
     } catch (error) {
-      if (isNotFound(error)) return null;
+      if (isErrno(error, "ENOENT")) return null;
       throw error;
     }
   }
 
   async loadById(id: string): Promise<Review | null> {
-    if (!/^[a-f0-9]{32}$/.test(id)) throw new Error("session id is invalid");
+    if (!/^[a-f0-9]{32}$/.test(id)) throw new AppError("invalid_request", 400, "session id is invalid");
     try {
-      const raw = await readFile(join(this.reviewDir(), `${id}.json`), "utf8");
-      return ensureMetrics(JSON.parse(raw) as Review);
+      return await this.readStored(`${id}.json`);
     } catch (error) {
-      if (isNotFound(error)) return null;
+      if (isErrno(error, "ENOENT")) return null;
       throw error;
     }
   }
 
   async save(review: Review): Promise<void> {
-    await mkdir(this.reviewDir(), { recursive: true, mode: 0o700 });
-    await writeFile(this.filePath(review.documentPath), `${JSON.stringify(review, null, 2)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
+    const validated = parseStoredReview(review);
+    const content = `${JSON.stringify(validated, null, 2)}\n`;
+    if (Buffer.byteLength(content, "utf8") > MAX_STORED_REVIEW_BYTES) {
+      throw new AppError("review_store_corrupt", 500, "Review exceeds the storage limit");
+    }
+    await atomicWritePrivateFile(this.reviewDir(), this.filePath(validated.documentPath), content);
   }
 
   async listRecent(limit: number): Promise<StoredReviewSummary[]> {
@@ -45,7 +49,7 @@ export class JsonReviewStore implements ReviewStore {
     try {
       entries = await readdir(this.reviewDir());
     } catch (error) {
-      if (isNotFound(error)) return [];
+      if (isErrno(error, "ENOENT")) return [];
       throw error;
     }
     const reviews = await Promise.all(entries.filter((entry) => entry.endsWith(".json")).map((entry) => this.readRecent(entry)));
@@ -65,7 +69,7 @@ export class JsonReviewStore implements ReviewStore {
 
   private async readRecent(entry: string): Promise<StoredReviewSummary | null> {
     try {
-      const review = JSON.parse(await readFile(join(this.reviewDir(), entry), "utf8")) as Review;
+      const review = await this.readStored(entry);
       return {
         id: entry.replace(/\.json$/, ""),
         documentPath: review.documentPath,
@@ -76,18 +80,41 @@ export class JsonReviewStore implements ReviewStore {
         updatedAt: review.updatedAt,
         activeMs: review.metrics?.activeMs ?? 0,
       };
-    } catch {
-      return null;
+    } catch (error) {
+      if (isErrno(error, "ENOENT")) return null;
+      throw error;
     }
+  }
+
+  private async readStored(entry: string, expectedPath?: string): Promise<Review> {
+    let value: unknown;
+    try {
+      const raw = await readFile(join(this.reviewDir(), entry));
+      if (raw.byteLength > MAX_STORED_REVIEW_BYTES) throw corruptReview(entry);
+      value = JSON.parse(raw.toString("utf8"));
+    } catch (error) {
+      if (isErrno(error, "ENOENT")) throw error;
+      throw corruptReview(entry);
+    }
+    let review: Review;
+    try {
+      review = parseStoredReview(value);
+    } catch {
+      throw corruptReview(entry);
+    }
+    const id = entry.replace(/\.json$/, "");
+    if (!/^[a-f0-9]{32}$/.test(id) || pathKey(review.documentPath) !== id) throw corruptReview(entry);
+    if (expectedPath != null && review.documentPath !== expectedPath) throw corruptReview(entry);
+    return review;
   }
 }
 
-function isNotFound(error: unknown): boolean {
-  return typeof error === "object" && error != null && "code" in error && error.code === "ENOENT";
-}
-
-// Old store files predate Review.metrics; default it on read so every consumer sees a well-formed
-// record. Shape validation stays the domain's job — this only fills a missing field.
-function ensureMetrics(review: Review): Review {
-  return review.metrics == null ? { ...review, metrics: { activeMs: 0 } } : review;
+function corruptReview(entry: string): AppError {
+  const filename = basename(entry).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100) || "unknown.json";
+  return new AppError(
+    "review_store_corrupt",
+    500,
+    "Stored review is malformed",
+    { filename },
+  );
 }

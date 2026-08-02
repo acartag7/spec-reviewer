@@ -1,7 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AppConfig } from "../../config.ts";
+import { AppError } from "../../domain/errors.ts";
 import type { ReviewSessionWaiter } from "../../application/review-session.ts";
 import type { ReviewerService } from "../../application/reviewer-service.ts";
+import { readActiveTime, readReviewDraft, readSessionAction } from "./actions.ts";
 import { readJson, sendError, sendJson } from "./json.ts";
 import { rejectUnsafeRequest } from "./security.ts";
 import { serveStatic } from "./static.ts";
@@ -66,7 +68,7 @@ async function routeApi(
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/review") {
-    sendJson(res, 200, await service.saveReview(readDraft(await readJson(req))));
+    sendJson(res, 200, await service.saveReview(readReviewDraft(await readJson(req))));
     return;
   }
   if (req.method === "GET" && url.pathname === "/api/export") {
@@ -76,7 +78,7 @@ async function routeApi(
   if (req.method === "POST" && url.pathname === "/api/active-time") {
     // Lightweight passive flush (tab close / document switch) — accumulates a delta WITHOUT a
     // draft, so it must NOT go through saveReview (which would wipe annotations). No wait session
-    // required; addActiveTime is a no-op when nothing is stored yet.
+    // required; positive read-only review time may create an otherwise empty review record.
     const action = readActiveTime(await readJson(req));
     await service.addActiveTime(action.path, action.activeMsDelta);
     sendJson(res, 200, { ok: true });
@@ -84,71 +86,35 @@ async function routeApi(
   }
   if (req.method === "POST" && url.pathname === "/api/session/finish") {
     if (waitSession == null) {
-      sendJson(res, 409, { error: { message: "No waiting review session" } });
-      return;
+      throw new AppError("invalid_request", 409, "No waiting review session");
     }
     const action = readSessionAction(await readJson(req));
-    // Persist the final active-time delta before resolving. Guard on "waiting" so a second
-    // finish (idempotent complete()) does not double-persist. addActiveTime preserves annotations.
-    if (waitSession.status === "waiting" && action.activeMsDelta != null) {
-      await service.addActiveTime(action.path, action.activeMsDelta);
-    }
-    const exported = await service.exportReview(action.path);
-    sendJson(res, 200, waitSession.finish(action.path, exported.markdown, exported.openAnnotations, exported.carriedOver, exported.activeMs));
+    const path = service.resolveDocumentPath(action.path);
+    const completion = await waitSession.runTerminal(path, action.activeMsDelta, async (delta) => {
+      const exported = await service.finishReview(path, delta);
+      return { status: "finished" as const, path, ...exported };
+    });
+    sendJson(res, 200, completion);
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/session/cancel") {
     if (waitSession == null) {
-      sendJson(res, 409, { error: { message: "No waiting review session" } });
-      return;
+      throw new AppError("invalid_request", 409, "No waiting review session");
     }
     const action = readSessionAction(await readJson(req));
-    if (waitSession.status === "waiting" && action.activeMsDelta != null) {
-      await service.addActiveTime(action.path, action.activeMsDelta);
-    }
-    const exported = await service.exportReview(action.path);
-    sendJson(res, 200, waitSession.cancel(action.path, action.reason, exported.activeMs));
+    const path = service.resolveDocumentPath(action.path);
+    const completion = await waitSession.runTerminal(path, action.activeMsDelta, async (delta) => {
+      const activeMs = await service.cancelReview(path, delta);
+      return { status: "canceled" as const, path, reason: action.reason, activeMs };
+    });
+    sendJson(res, 200, completion);
     return;
   }
-  sendJson(res, 404, { error: { message: "Not found" } });
+  throw new AppError("not_found", 404, "Not found");
 }
 
 function requirePath(url: URL): string {
   const path = url.searchParams.get("path");
-  if (path == null || path.trim() === "") throw new Error("path is required");
+  if (path == null || path.trim() === "") throw new AppError("invalid_request", 400, "path is required");
   return path;
-}
-
-function readDraft(value: unknown): { path: string; summary?: unknown; annotations?: unknown; activeMsDelta?: unknown } {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("request body must be an object");
-  }
-  const record = value as Record<string, unknown>;
-  if (typeof record.path !== "string" || record.path.trim() === "") {
-    throw new Error("path is required");
-  }
-  return { path: record.path, summary: record.summary, annotations: record.annotations, activeMsDelta: record.activeMsDelta };
-}
-
-function readSessionAction(value: unknown): { path: string; reason: string | null; activeMsDelta?: unknown } {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("request body must be an object");
-  }
-  const record = value as Record<string, unknown>;
-  if (typeof record.path !== "string" || record.path.trim() === "") {
-    throw new Error("path is required");
-  }
-  const reason = typeof record.reason === "string" && record.reason.trim() !== "" ? record.reason.trim() : null;
-  return { path: record.path, reason, activeMsDelta: record.activeMsDelta };
-}
-
-function readActiveTime(value: unknown): { path: string; activeMsDelta: unknown } {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("request body must be an object");
-  }
-  const record = value as Record<string, unknown>;
-  if (typeof record.path !== "string" || record.path.trim() === "") {
-    throw new Error("path is required");
-  }
-  return { path: record.path, activeMsDelta: record.activeMsDelta };
 }

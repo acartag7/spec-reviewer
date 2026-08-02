@@ -3,7 +3,7 @@ export type ReviewSourceState = "unreviewed" | "current" | "changed" | "missing"
 export type AnnotationKind = "issue" | "question" | "suggestion" | "decision" | "note"
 export type AnnotationSeverity = "blocker" | "major" | "minor" | "note"
 export type AnnotationStatus = "open" | "resolved"
-export type AnnotationAnchorState = "ok" | "moved" | "not-found"
+export type AnnotationAnchorState = "ok" | "moved" | "ambiguous" | "not-found"
 
 export interface DocumentLine {
   number: number
@@ -51,6 +51,7 @@ export interface ReviewMetrics {
 export interface Review {
   documentPath: string
   documentDigest: string
+  revision: number
   summary: string
   annotations: Annotation[]
   createdAt: string
@@ -86,6 +87,7 @@ export interface SelectionRange {
 
 export interface ReviewDraft {
   path: string
+  baseRevision: number
   summary: string
   annotations: Annotation[]
   activeMsDelta?: number

@@ -1,4 +1,4 @@
-import { MapPinCheck, MapPinSearch, MapPinX, Pencil, Trash2 } from "lucide-react"
+import { CircleCheck, MapPinCheck, MapPinSearch, MapPinX, Pencil, RotateCcw, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Annotation } from "@/api/types"
@@ -13,76 +13,62 @@ import { cn } from "@/lib/utils"
 
 interface AnnotationListProps {
   annotations: Annotation[]
-  /** True when the saved review is against an older digest than the current file. */
-  stale?: boolean
   onOpen: (annotation: Annotation) => void
   onEdit: (annotation: Annotation) => void
+  onStatus: (annotation: Annotation, status: Annotation["status"]) => void
   onDelete: (annotation: Annotation) => void
 }
 
-export function AnnotationList({ annotations, stale = false, onOpen, onEdit, onDelete }: AnnotationListProps) {
-  const isPreviousVersion = (annotation: Annotation) =>
-    annotationAnchorState(annotation) === "not-found" && stale
-  const current = sortAnnotations(annotations.filter((annotation) => !isPreviousVersion(annotation)))
-  const previous = sortAnnotations(annotations.filter(isPreviousVersion))
-
+export function AnnotationList({ annotations, onOpen, onEdit, onStatus, onDelete }: AnnotationListProps) {
+  const current = sortAnnotations(annotations)
+  const open = current.filter((annotation) => annotation.status === "open")
+  const resolved = current.filter((annotation) => annotation.status === "resolved")
   return (
     <section className="grid gap-3">
       <div className="font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground">Open Notes</div>
-      {current.length === 0 ? (
-        <div className="text-sm text-muted-foreground">
-          {previous.length > 0 ? "No open notes for this version." : "No annotations yet."}
-        </div>
+      {open.length === 0 ? (
+        <div className="text-sm text-muted-foreground">No open annotations.</div>
       ) : (
         <div className="grid gap-2">
-          {current.map((annotation) => (
+          {open.map((annotation) => (
             <NoteCard
               key={annotation.id}
               annotation={annotation}
               onOpen={onOpen}
               onEdit={onEdit}
+              onStatus={onStatus}
               onDelete={onDelete}
             />
           ))}
         </div>
       )}
-      {previous.length > 0 ? (
-        <details className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20">
-          <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground">
-            <span className="font-mono uppercase tracking-[0.14em]">Previous version</span>
-            <Badge variant="outline">{previous.length}</Badge>
-            <span className="text-muted-foreground/80">resolved or no longer in this file</span>
-          </summary>
-          <div className="grid gap-2 p-3 pt-0">
-            {previous.map((annotation) => (
-              <NoteCard
-                key={annotation.id}
-                annotation={annotation}
-                dimmed
-                onOpen={onOpen}
-                onEdit={onEdit}
-                onDelete={onDelete}
-              />
+      {resolved.length > 0 && (
+        <>
+          <div className="mt-2 font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground">Resolved Notes</div>
+          <div className="grid gap-2">
+            {resolved.map((annotation) => (
+              <NoteCard key={annotation.id} annotation={annotation} onOpen={onOpen} onEdit={onEdit} onStatus={onStatus} onDelete={onDelete} />
             ))}
           </div>
-        </details>
-      ) : null}
+        </>
+      )}
     </section>
   )
 }
 
 interface NoteCardProps {
   annotation: Annotation
-  dimmed?: boolean
   onOpen: (annotation: Annotation) => void
   onEdit: (annotation: Annotation) => void
+  onStatus: (annotation: Annotation, status: Annotation["status"]) => void
   onDelete: (annotation: Annotation) => void
 }
 
-function NoteCard({ annotation, dimmed = false, onOpen, onEdit, onDelete }: NoteCardProps) {
+function NoteCard({ annotation, onOpen, onEdit, onStatus, onDelete }: NoteCardProps) {
+  const resolved = annotation.status === "resolved"
   return (
     <article
-      className={cn("grid cursor-pointer gap-2 rounded-lg border bg-muted/40 p-3 hover:bg-muted", dimmed && "opacity-70")}
+      className="grid cursor-pointer gap-2 rounded-lg border bg-muted/40 p-3 hover:bg-muted"
       onClick={() => onOpen(annotation)}
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -93,6 +79,18 @@ function NoteCard({ annotation, dimmed = false, onOpen, onEdit, onDelete }: Note
       </div>
       <div className="text-sm leading-5">{annotation.note}</div>
       <div className="flex justify-end gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={(event) => {
+            event.stopPropagation()
+            onStatus(annotation, resolved ? "open" : "resolved")
+          }}
+        >
+          {resolved ? <RotateCcw /> : <CircleCheck />}
+          {resolved ? "Reopen" : "Resolve"}
+        </Button>
         <Button
           type="button"
           variant="ghost"
