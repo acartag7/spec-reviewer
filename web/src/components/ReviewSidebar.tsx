@@ -17,6 +17,7 @@ interface ReviewSidebarProps {
   exportMarkdown: string
   exportLoading: boolean
   saving: boolean
+  terminalPending: boolean
   selectionRequest: number
   onFormChange: (form: AnnotationFormValue) => void
   onFormSubmit: () => void
@@ -64,6 +65,7 @@ export function ReviewSidebar(props: ReviewSidebarProps) {
               maxLine={props.document.lines.length}
               allowStoredRange={keepsSavedRange}
               saving={props.saving}
+              locked={props.terminalPending}
               onChange={props.onFormChange}
               onSubmit={props.onFormSubmit}
               onReset={props.onFormReset}
@@ -74,6 +76,7 @@ export function ReviewSidebar(props: ReviewSidebarProps) {
               value={props.summary}
               dirty={props.summary !== props.review.summary}
               saving={props.saving}
+              locked={props.terminalPending}
               onChange={props.onSummaryChange}
               onRevert={() => props.onSummaryChange(props.review.summary)}
               onSave={props.onSummarySave}

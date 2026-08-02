@@ -147,6 +147,7 @@ test("opening an annotation switches from Changes before scrolling to its render
       exportMarkdown=""
       exportLoading={false}
       saving={false}
+      terminalPending={false}
       onSelection={vi.fn()}
       onFormChange={vi.fn()}
       onFormSubmit={vi.fn()}
@@ -176,7 +177,7 @@ test("selecting the same source range again returns the sidebar to Feedback", ()
     <Workspace
       document={documentFixture} review={reviewFixture} selection={selection}
       sourceState="current" comparison={{ state: "unavailable", reason: "no-baseline" }}
-      form={emptyForm(selection)} summary="" exportMarkdown="" exportLoading={false} saving={false}
+      form={emptyForm(selection)} summary="" exportMarkdown="" exportLoading={false} saving={false} terminalPending={false}
       onSelection={vi.fn()} onFormChange={vi.fn()} onFormSubmit={vi.fn()} onFormReset={vi.fn()}
       onSummaryChange={vi.fn()} onSummarySave={vi.fn()} onEditAnnotation={vi.fn()}
       onStatusAnnotation={vi.fn()} onDeleteAnnotation={vi.fn()} onCopyExport={vi.fn()}

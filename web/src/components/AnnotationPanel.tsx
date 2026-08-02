@@ -14,6 +14,7 @@ interface AnnotationPanelProps {
   maxLine: number
   allowStoredRange?: boolean
   saving: boolean
+  locked?: boolean
   onChange: (form: AnnotationFormValue) => void
   onSubmit: () => void
   onReset: () => void
@@ -25,6 +26,7 @@ export function AnnotationPanel({
   maxLine,
   allowStoredRange = false,
   saving,
+  locked = false,
   onChange,
   onSubmit,
   onReset,
@@ -73,6 +75,7 @@ export function AnnotationPanel({
           onSubmit()
         }}
       >
+        <fieldset disabled={locked} className="grid gap-3">
         <details className="group" open={rangeOpen} onToggle={(event) => setRangeOpen(event.currentTarget.open)}>
           <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground">Adjust source range</summary>
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -161,6 +164,7 @@ export function AnnotationPanel({
           </Button>
         </div>
         <input name="selectionLineStart" type="hidden" value={selection.lineStart} readOnly />
+        </fieldset>
       </form>
     </section>
   )

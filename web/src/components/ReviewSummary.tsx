@@ -7,12 +7,13 @@ interface ReviewSummaryProps {
   value: string
   dirty: boolean
   saving: boolean
+  locked?: boolean
   onChange: (value: string) => void
   onRevert: () => void
   onSave: () => void
 }
 
-export function ReviewSummary({ value, dirty, saving, onChange, onRevert, onSave }: ReviewSummaryProps) {
+export function ReviewSummary({ value, dirty, saving, locked = false, onChange, onRevert, onSave }: ReviewSummaryProps) {
   const bytes = new TextEncoder().encode(value).byteLength
   const tooLarge = bytes > 64 * 1024
   return (
@@ -26,6 +27,7 @@ export function ReviewSummary({ value, dirty, saving, onChange, onRevert, onSave
         id="review-summary"
         rows={3}
         value={value}
+        disabled={locked}
         placeholder="Summarize the decision or overall direction."
         aria-invalid={tooLarge}
         aria-describedby={tooLarge ? "review-summary-limit" : undefined}

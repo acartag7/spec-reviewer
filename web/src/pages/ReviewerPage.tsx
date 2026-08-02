@@ -223,7 +223,7 @@ export function ReviewerPage() {
           form={form} summary={summary}
           exportMarkdown={exportQuery.data?.markdown ?? ""}
           exportLoading={exportQuery.isLoading || exportQuery.isFetching}
-          saving={reviewLocked}
+          saving={reviewLocked} terminalPending={terminal.pending}
           onSelection={selectLines}
           onFormChange={updateForm}
           onFormSubmit={addOrUpdateAnnotation}

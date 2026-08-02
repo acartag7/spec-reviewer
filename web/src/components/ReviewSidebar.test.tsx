@@ -29,6 +29,7 @@ function Harness() {
       exportMarkdown=""
       exportLoading={false}
       saving={false}
+      terminalPending={false}
       selectionRequest={0}
       onFormChange={setForm}
       onFormSubmit={vi.fn()}

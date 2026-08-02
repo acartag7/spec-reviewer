@@ -15,6 +15,7 @@ interface WorkspaceProps {
   exportMarkdown: string
   exportLoading: boolean
   saving: boolean
+  terminalPending: boolean
   onSelection: (selection: SelectionRange) => void
   onFormChange: (form: AnnotationFormValue) => void
   onFormSubmit: () => void
@@ -54,6 +55,7 @@ export function Workspace(props: WorkspaceProps) {
         exportMarkdown={props.exportMarkdown}
         exportLoading={props.exportLoading}
         saving={props.saving}
+        terminalPending={props.terminalPending}
         selectionRequest={selectionRequest}
         onFormChange={props.onFormChange}
         onFormSubmit={props.onFormSubmit}
