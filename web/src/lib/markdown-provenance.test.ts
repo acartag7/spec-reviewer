@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import { buildMarkdownBlocks } from "@/lib/markdown-provenance"
+import { buildMarkdownBlocks, sourceTextForRange } from "@/lib/markdown-provenance"
 import { renderMarkdownBlockHtml } from "@/lib/markdown-html"
 import { selectionFromElement } from "@/lib/selection-utils"
 
@@ -33,6 +33,15 @@ test("buildMarkdownBlocks maps top-level markdown ranges to source lines", () =>
   expect(blocks.find((block) => block.startLine === 9)).toMatchObject({ startLine: 9, endLine: 11 })
   expect(blocks.find((block) => block.startLine === 13)).toMatchObject({ startLine: 13, endLine: 13 })
   expect(blocks.find((block) => block.startLine === 15)).toMatchObject({ startLine: 15, endLine: 20 })
+})
+
+test("sourceTextForRange preserves indentation, blank lines, and trailing spaces", () => {
+  const lines = [
+    { number: 1, text: "  indented  ", kind: "normal" as const, sectionTitle: null },
+    { number: 2, text: "", kind: "blank" as const, sectionTitle: null },
+  ]
+
+  expect(sourceTextForRange(lines, 1, 2)).toBe("  indented  \n")
 })
 
 test("renderMarkdownBlockHtml adds finer list and code source anchors", () => {

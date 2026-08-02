@@ -305,7 +305,8 @@ history that the application will never use.
 12. A 20,001-line comparison and a forced library timeout return `too-large`.
 13. APG keyboard navigation, associated tabpanels, textual markers, totals,
     line-number names, gap counts, visible bidi-control labels, current-side row
-    selection populating the annotation form, Clear resetting that selection,
+    selection populating the annotation form without trimming source whitespace,
+    Clear resetting that selection,
     opening any annotation by switching from Changes to an anchored view before
     scrolling, and exact-item Rendered current-change markers are asserted. A
     changed list item does not color its whole list, forged HTML provenance
@@ -319,13 +320,13 @@ history that the application will never use.
 
 This slice exceeded three adversarial review rounds because the initial contract
 named list-item and code-line markers without defining nested-list provenance or
-a non-color signal for changed code. It also omitted note navigation from a
-diff-only view and cross-process clock rollback from the round-ordering model.
-Review therefore discovered behavior the contract should have enumerated.
-Future Rendered provenance and durable-ordering work must specify flat, nested,
-raw-HTML, code-line, navigation, restart, and clock-rollback behavior before
-implementation; review verifies those cases rather than introducing them round
-by round.
+a non-color signal for changed code. It also omitted exact source-whitespace
+preservation, note navigation from a diff-only view, and cross-process clock
+rollback from the round-ordering model. Review therefore discovered behavior the
+contract should have enumerated. Future Rendered provenance and durable-ordering
+work must specify flat, nested, raw-HTML, code-line, whitespace, navigation,
+restart, and clock-rollback behavior before implementation; review verifies
+those cases rather than introducing them round by round.
 
 ## Out of scope
 

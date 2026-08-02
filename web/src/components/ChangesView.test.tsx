@@ -14,7 +14,7 @@ const comparison: ReviewComparison = {
   removed: 1,
   rows: [
     { kind: "remove", oldLine: 2, newLine: null, text: "old\u202Etext\r\u2028\u{E007F}é 漢字 👩‍💻" },
-    { kind: "add", oldLine: null, newLine: 2, text: "<img src=x onerror=alert(1)>" },
+    { kind: "add", oldLine: null, newLine: 2, text: "  <img src=x onerror=alert(1)>  " },
     { kind: "gap", hiddenOld: 8, hiddenNew: 9 },
     { kind: "no-newline", oldLine: null, newLine: null, text: "No newline at end of file" },
   ],
@@ -41,7 +41,7 @@ test("selecting a current-side diff row populates exact current source evidence"
   expect(onSelect).toHaveBeenLastCalledWith({
     lineStart: 2,
     lineEnd: 2,
-    selectedText: "<img src=x onerror=alert(1)>",
+    selectedText: "  <img src=x onerror=alert(1)>  ",
   })
   onSelect.mockClear()
   fireEvent.click(screen.getByText("old[U+202E]text[U+000D][U+2028][U+E007F]é 漢字 👩‍💻"))
@@ -55,7 +55,7 @@ test("selecting a current-side diff row populates exact current source evidence"
   expect(onSelect).toHaveBeenCalledWith({
     lineStart: 2,
     lineEnd: 2,
-    selectedText: "<img src=x onerror=alert(1)>",
+    selectedText: "  <img src=x onerror=alert(1)>  ",
   })
   window.getSelection()?.removeAllRanges()
   rerender(<ChangesView
@@ -115,7 +115,7 @@ const documentFixture: ReviewDocument = {
   sections: [{ line: 1, level: 1, title: "Spec" }],
   lines: [
     { number: 1, text: "# Spec", kind: "heading", sectionTitle: "Spec" },
-    { number: 2, text: "<img src=x onerror=alert(1)>", kind: "normal", sectionTitle: "Spec" },
+    { number: 2, text: "  <img src=x onerror=alert(1)>  ", kind: "normal", sectionTitle: "Spec" },
   ],
 }
 
