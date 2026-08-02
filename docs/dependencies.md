@@ -25,6 +25,7 @@ No exact publish dates were included in this handoff. Treat the 2026-06-13 verif
 | `@tanstack/react-query` | `5.96.2` | Verified >=15 days old on 2026-06-13 |
 | `class-variance-authority` | `0.7.1` | Verified >=15 days old on 2026-06-13 |
 | `clsx` | `2.1.1` | Verified >=15 days old on 2026-06-13 |
+| `diff` | `8.0.4` | Published 2026-03-23; registry metadata checked 2026-08-02 |
 | `dompurify` | `3.4.7` | Verified >=15 days old on 2026-06-13 |
 | `lucide-react` | `1.7.0` | Verified >=15 days old on 2026-06-13 |
 | `marked` | `18.0.4` | Verified >=15 days old on 2026-06-13 |

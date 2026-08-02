@@ -2,16 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "react-router-dom"
 import { api, recordActiveTime } from "@/api/client"
-import type { Annotation, OpenDocumentResult, Review, ReviewDocument, ReviewSourceState, SelectionRange } from "@/api/types"
+import type { Annotation, OpenDocumentResult, Review, ReviewComparison, ReviewDocument, ReviewSourceState, SelectionRange } from "@/api/types"
 import { StartScreen } from "@/components/StartScreen"
 import { SessionOutcomeScreen } from "@/components/SessionOutcomeScreen"
 import { StatusToast } from "@/components/StatusToast"
 import { TopBar } from "@/components/TopBar"
 import { Workspace } from "@/components/Workspace"
-import { createAnnotation, emptyForm, formFromAnnotation, removeAnnotation, upsertAnnotation } from "@/lib/review-utils"
-import type { AnnotationFormValue } from "@/lib/review-utils"
+import { createAnnotation, emptyForm, formFromAnnotation, removeAnnotation, upsertAnnotation, type AnnotationFormValue } from "@/lib/review-utils"
 import { isMarkdownFile } from "@/lib/path-utils"
 import { scrollToLine } from "@/lib/scroll-to-line"
+import { NO_SELECTION } from "@/lib/selection-utils"
 import { recoverFailedSave } from "@/lib/save-recovery"
 import { routeTerminalActiveTime, sessionOutcomeFor, type SessionOutcome } from "@/lib/terminal-active-time"
 import { useActiveReviewTime } from "@/lib/use-active-review-time"
@@ -26,9 +26,10 @@ export function ReviewerPage() {
   const requestedPath = searchParams.get("path") ?? ""
   const [document, setDocument] = useState<ReviewDocument | null>(null)
   const [review, setReview] = useState<Review | null>(null)
-  const [selection, setSelection] = useState<SelectionRange>(initialSelection)
+  const [selection, setSelection] = useState<SelectionRange>(NO_SELECTION)
   const [form, setForm] = useState<AnnotationFormValue>(() => emptyForm(initialSelection))
   const [sourceState, setSourceState] = useState<ReviewSourceState>("unreviewed")
+  const [comparison, setComparison] = useState<ReviewComparison>({ state: "unavailable", reason: "no-baseline" })
   const [status, setStatus] = useState("")
   const [sessionOutcome, setSessionOutcome] = useState<SessionOutcome | null>(null)
   const showStatus = useCallback((message: string) => {
@@ -53,13 +54,13 @@ export function ReviewerPage() {
     enabled: document != null,
   })
   const applyOpenResult = useCallback((result: OpenDocumentResult) => {
-    const nextSelection = { lineStart: 1, lineEnd: 1, selectedText: "" }
     setDocument(result.document)
     setReview(result.review)
     confirmedReviewRef.current = result.review
-    setSelection(nextSelection)
-    setForm(emptyForm(nextSelection))
+    setSelection(NO_SELECTION)
+    setForm(emptyForm(initialSelection))
     setSourceState(result.sourceState ?? (result.stale ? "changed" : "current"))
+    setComparison(result.comparison ?? { state: "unavailable", reason: "no-baseline" })
   }, [])
   useEffect(() => {
     if (requestedPath === "" && configQuery.data?.defaultDocumentPath) {
@@ -189,18 +190,14 @@ export function ReviewerPage() {
     }
   }
 
-  function flushTerminalActiveTime(): number {
-    return routeTerminalActiveTime(document?.path ?? null, configQuery.data?.defaultDocumentPath ?? null, flushActiveTime(), recordActiveTime)
-  }
+  const flushTerminalActiveTime = () => routeTerminalActiveTime(document?.path ?? null, configQuery.data?.defaultDocumentPath ?? null, flushActiveTime(), recordActiveTime)
 
   const canCopy = document != null
   const sessionPath = configQuery.data?.defaultDocumentPath ?? null
   const canFinish = document != null && document.path === sessionPath
   const finishing = finishMutation.isPending || cancelMutation.isPending
 
-  if (sessionOutcome != null) {
-    return <SessionOutcomeScreen outcome={sessionOutcome.outcome} openAnnotations={sessionOutcome.openAnnotations} activeMs={sessionOutcome.activeMs} />
-  }
+  if (sessionOutcome != null) return <SessionOutcomeScreen outcome={sessionOutcome.outcome} openAnnotations={sessionOutcome.openAnnotations} activeMs={sessionOutcome.activeMs} />
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
@@ -221,6 +218,7 @@ export function ReviewerPage() {
           review={review}
           selection={selection}
           sourceState={sourceState}
+          comparison={comparison}
           form={form}
           exportMarkdown={exportQuery.data?.markdown ?? ""}
           exportLoading={exportQuery.isLoading || exportQuery.isFetching}
@@ -228,7 +226,7 @@ export function ReviewerPage() {
           onSelection={selectLines}
           onFormChange={setForm}
           onFormSubmit={addOrUpdateAnnotation}
-          onFormReset={() => setForm(emptyForm(selection))}
+          onFormReset={() => { window.getSelection()?.removeAllRanges(); setSelection(NO_SELECTION); setForm(emptyForm(initialSelection)) }}
           onOpenAnnotation={(annotation) => scrollToLine(annotation.lineStart)}
           onEditAnnotation={(annotation) => setForm(formFromAnnotation(annotation))}
           onStatusAnnotation={setAnnotationStatus}

@@ -2,7 +2,6 @@ import { sectionForLine } from "../domain/document.ts";
 import { AppError, isErrno } from "../domain/errors.ts";
 import {
   createEmptyReview,
-  normalizeActiveMsDelta,
   normalizeMetrics,
   normalizeReviewDraft,
   sourceTextForLines,
@@ -10,7 +9,9 @@ import {
   type Review,
   type ReviewDraft,
 } from "../domain/review.ts";
+import type { ReviewComparison } from "../domain/review-comparison.ts";
 import { exportReviewMarkdown, reviewExportCounts } from "./export-review.ts";
+import { buildReviewComparison } from "./review-comparison.ts";
 import {
   assertBaseRevision,
   assertDerivedAnchors,
@@ -19,21 +20,27 @@ import {
   sameSavedRange,
 } from "./review-validation.ts";
 import type { DocumentReader, RecentReview, ReviewSourceState, ReviewStore } from "./ports.ts";
+import type { ReviewRoundStore } from "./round-ports.ts";
+import type { TerminalAttempt } from "./review-session.ts";
+import { cancelTerminalReview, finishTerminalReview } from "./terminal-review.ts";
 
 export interface OpenDocumentResult {
   document: Awaited<ReturnType<DocumentReader["readMarkdown"]>>["document"];
   review: Review;
   stale: boolean;
   sourceState: ReviewSourceState;
+  comparison: ReviewComparison;
 }
 
 export class ReviewerService {
   private readonly reader: DocumentReader;
   private readonly store: ReviewStore;
+  private readonly rounds: ReviewRoundStore;
 
-  constructor(reader: DocumentReader, store: ReviewStore) {
+  constructor(reader: DocumentReader, store: ReviewStore, rounds: ReviewRoundStore) {
     this.reader = reader;
     this.store = store;
+    this.rounds = rounds;
   }
 
   resolveDocumentPath(path: string): string {
@@ -60,18 +67,29 @@ export class ReviewerService {
   }
 
   async openDocument(path: string): Promise<OpenDocumentResult> {
-    const { document } = await this.reader.readMarkdown(path);
+    const { document, content } = await this.reader.readMarkdown(path);
     const stored = await this.store.load(document.path);
+    const baseline = await this.rounds.loadLatest(document.path);
+    const comparison = baseline.state === "ready"
+      ? buildReviewComparison(baseline.round, content, document.digest)
+      : { state: "unavailable" as const, reason: baseline.reason };
     if (stored == null) {
       return {
         document,
         review: withResolvedAnchors(document, createEmptyReview(document.path, document.digest)),
         stale: false,
         sourceState: "unreviewed",
+        comparison,
       };
     }
     const stale = stored.documentDigest !== document.digest;
-    return { document, review: withResolvedAnchors(document, stored), stale, sourceState: stale ? "changed" : "current" };
+    return {
+      document,
+      review: withResolvedAnchors(document, stored),
+      stale,
+      sourceState: stale ? "changed" : "current",
+      comparison,
+    };
   }
 
   async documentPathForSession(id: string): Promise<string> {
@@ -140,28 +158,16 @@ export class ReviewerService {
     return this.synchronized(resolvedPath, async () => this.exportLocked(resolvedPath));
   }
 
-  async finishReview(path: string, delta: unknown) {
+  async finishReview(path: string, terminal: TerminalAttempt) {
     const resolvedPath = this.reader.resolvePath(path);
     return this.synchronized(resolvedPath, async () => {
-      const { document } = await this.reader.readMarkdown(resolvedPath);
-      const stored = await this.store.load(document.path);
-      const review = stored ?? createEmptyReview(document.path, document.digest);
-      const updated = { ...review, metrics: normalizeMetrics(review.metrics, delta) };
-      if (updated.metrics.activeMs !== review.metrics.activeMs) await this.store.save(updated);
-      const resolved = withResolvedAnchors(document, updated);
-      return exportResult(document, resolved);
+      return finishTerminalReview(this.reader, this.store, this.rounds, resolvedPath, terminal);
     });
   }
 
-  async cancelReview(path: string, delta: unknown): Promise<number> {
+  async cancelReview(path: string, terminal: TerminalAttempt): Promise<number> {
     const resolvedPath = this.reader.resolvePath(path);
-    return this.synchronized(resolvedPath, async () => {
-      const stored = await this.store.load(resolvedPath);
-      if (stored == null) return normalizeActiveMsDelta(delta);
-      const updated = { ...stored, metrics: normalizeMetrics(stored.metrics, delta) };
-      if (updated.metrics.activeMs !== stored.metrics.activeMs) await this.store.save(updated);
-      return updated.metrics.activeMs;
-    });
+    return this.synchronized(resolvedPath, async () => cancelTerminalReview(this.store, resolvedPath, terminal));
   }
 
   // Accumulate active-reviewing time WITHOUT touching annotations, summary, or timestamps. Used by the

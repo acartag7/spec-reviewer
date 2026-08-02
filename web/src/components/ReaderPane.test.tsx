@@ -9,8 +9,9 @@ test("renders markdown by default and keeps source-line click anchors", () => {
     <ReaderPane
       document={documentFixture}
       review={reviewFixture}
-      selection={{ lineStart: 1, lineEnd: 1, selectedText: "" }}
+      selection={{ lineStart: 0, lineEnd: 0, selectedText: "" }}
       sourceState="current"
+      comparison={{ state: "unavailable", reason: "no-baseline" }}
       onSelect={onSelect}
     />,
   )
@@ -42,6 +43,96 @@ test("renders markdown by default and keeps source-line click anchors", () => {
     selectedText: "# Title",
   })
 })
+
+test("Rendered marks exact changed items without leaking its label into source evidence", () => {
+  const onSelect = vi.fn()
+  const { rerender } = render(
+    <ReaderPane
+      document={documentFixture}
+      review={reviewFixture}
+      selection={{ lineStart: 0, lineEnd: 0, selectedText: "" }}
+      sourceState="changed"
+      comparison={{
+        state: "diff",
+        roundId: "1750000000000-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        completedAt: "2025-06-15T15:06:40.000Z",
+        beforeDigest: "a".repeat(64),
+        afterDigest: "b".repeat(64),
+        added: 1,
+        removed: 1,
+        rows: [
+          { kind: "remove", oldLine: 3, newLine: null, text: "Old line" },
+          { kind: "add", oldLine: null, newLine: 3, text: "- Open local file." },
+        ],
+      }}
+      onSelect={onSelect}
+    />,
+  )
+  fireEvent.click(screen.getByRole("tab", { name: "Rendered" }))
+  const changedItem = screen.getByText("Open local file.").closest("[data-change]")
+  expect(changedItem).toHaveAttribute("data-change", "current")
+  expect(changedItem?.tagName).toBe("LI")
+  expect(screen.getByText("Changed", { selector: ".rendered-change-label" })).toBeInTheDocument()
+  expect(changedItem?.closest(".markdown-block")).not.toHaveAttribute("data-change")
+  expect(screen.getAllByRole("heading", { name: "Title" })[1]?.closest("[data-change]"))
+    .toBeNull()
+  const range = document.createRange()
+  range.selectNodeContents(changedItem!)
+  window.getSelection()?.removeAllRanges()
+  window.getSelection()?.addRange(range)
+  fireEvent.mouseUp(changedItem!.closest(".markdown-body")!)
+  expect(onSelect).toHaveBeenLastCalledWith({ lineStart: 3, lineEnd: 3, selectedText: "- Open local file." })
+  window.getSelection()?.removeAllRanges()
+  rerender(
+    <ReaderPane
+      document={documentFixture}
+      review={reviewFixture}
+      selection={{ lineStart: 3, lineEnd: 3, selectedText: "- Open local file." }}
+      sourceState="changed"
+      comparison={changedComparison}
+      onSelect={onSelect}
+    />,
+  )
+  fireEvent.click(screen.getByRole("tab", { name: "Rendered" }))
+  expect(screen.getByText("Open local file.").closest(".markdown-block")).toHaveClass("selected")
+  rerender(
+    <ReaderPane
+      document={documentFixture}
+      review={reviewFixture}
+      selection={{ lineStart: 1, lineEnd: 1, selectedText: "# Title" }}
+      sourceState="changed"
+      comparison={headingChangedComparison}
+      onSelect={onSelect}
+    />,
+  )
+  fireEvent.click(screen.getByRole("tab", { name: "Rendered" }))
+  const headingBlock = screen.getAllByRole("heading", { name: "Title" })[1]?.closest(".markdown-block")
+  expect(headingBlock).toHaveClass("selected", "changed")
+  expect(headingBlock?.querySelector(".rendered-change-label")).toHaveTextContent("Changed")
+})
+
+const changedComparison = {
+  state: "diff" as const,
+  roundId: "1750000000000-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  completedAt: "2025-06-15T15:06:40.000Z",
+  beforeDigest: "a".repeat(64),
+  afterDigest: "b".repeat(64),
+  added: 1,
+  removed: 1,
+  rows: [
+    { kind: "remove" as const, oldLine: 3, newLine: null, text: "Old line" },
+    { kind: "add" as const, oldLine: null, newLine: 3, text: "- Open local file." },
+  ],
+}
+
+const headingChangedComparison = {
+  ...changedComparison,
+  roundId: "1750000000001-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  rows: [
+    { kind: "remove" as const, oldLine: 1, newLine: null, text: "# Old title" },
+    { kind: "add" as const, oldLine: null, newLine: 1, text: "# Title" },
+  ],
+}
 
 const documentFixture: ReviewDocument = {
   path: "/tmp/spec.md",

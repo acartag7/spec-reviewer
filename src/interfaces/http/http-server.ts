@@ -90,8 +90,8 @@ async function routeApi(
     }
     const action = readSessionAction(await readJson(req));
     const path = service.resolveDocumentPath(action.path);
-    const completion = await waitSession.runTerminal(path, action.activeMsDelta, async (delta) => {
-      const exported = await service.finishReview(path, delta);
+    const completion = await waitSession.runTerminal(path, action.activeMsDelta, async (terminal) => {
+      const exported = await service.finishReview(path, terminal);
       return { status: "finished" as const, path, ...exported };
     });
     sendJson(res, 200, completion);
@@ -103,8 +103,8 @@ async function routeApi(
     }
     const action = readSessionAction(await readJson(req));
     const path = service.resolveDocumentPath(action.path);
-    const completion = await waitSession.runTerminal(path, action.activeMsDelta, async (delta) => {
-      const activeMs = await service.cancelReview(path, delta);
+    const completion = await waitSession.runTerminal(path, action.activeMsDelta, async (terminal) => {
+      const activeMs = await service.cancelReview(path, terminal);
       return { status: "canceled" as const, path, reason: action.reason, activeMs };
     });
     sendJson(res, 200, completion);

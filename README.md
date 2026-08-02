@@ -28,6 +28,7 @@ On finish, the command prints Markdown feedback for the agent to apply.
 
 - Opens local `.md` and `.markdown` files.
 - Lets you review rendered Markdown or source lines.
+- Shows completed-round changes as a bounded unified red/green diff.
 - Adds line, block, or selected-text notes.
 - Tracks whether saved anchors are current, moved, or missing after edits.
 - Reopens previous reviews from local state.
@@ -88,7 +89,9 @@ pnpm start -- review --storage-dir ~/.spec-reviewer path/to/spec.md
 ```
 
 The production server serves the built app and API from `127.0.0.1:3217` by
-default.
+default. A round write tightens an existing real storage directory to `0700`;
+symlinked storage components are rejected. The storage filesystem must support
+same-directory hard links and have enough free space for immutable round files.
 
 ## Build The Binary
 
@@ -102,6 +105,7 @@ pnpm run build:binary
 
 - Saved reviews live under `~/.spec-reviewer/reviews`.
 - Dropped files are copied under `~/.spec-reviewer/documents`.
+- Completed waiting-session rounds live under `~/.spec-reviewer/rounds`.
 - Reviewed source files are not modified.
 - No telemetry is sent.
 

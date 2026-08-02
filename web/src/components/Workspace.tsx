@@ -1,4 +1,4 @@
-import type { Annotation, Review, ReviewDocument, ReviewSourceState, SelectionRange } from "@/api/types"
+import type { Annotation, Review, ReviewComparison, ReviewDocument, ReviewSourceState, SelectionRange } from "@/api/types"
 import { AgentExport } from "@/components/AgentExport"
 import { AnnotationList } from "@/components/AnnotationList"
 import { AnnotationPanel } from "@/components/AnnotationPanel"
@@ -10,6 +10,7 @@ interface WorkspaceProps {
   review: Review
   selection: SelectionRange
   sourceState: ReviewSourceState
+  comparison: ReviewComparison
   form: AnnotationFormValue
   exportMarkdown: string
   exportLoading: boolean
@@ -33,6 +34,7 @@ export function Workspace(props: WorkspaceProps) {
         review={props.review}
         selection={props.selection}
         sourceState={props.sourceState}
+        comparison={props.comparison}
         onSelect={props.onSelection}
       />
       <aside className="review-scroll grid min-h-0 gap-5 overflow-auto border-t bg-card p-4 lg:border-l lg:border-t-0">

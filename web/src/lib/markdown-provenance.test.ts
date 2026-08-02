@@ -1,6 +1,7 @@
 import { expect, test } from "vitest"
 import { buildMarkdownBlocks } from "@/lib/markdown-provenance"
 import { renderMarkdownBlockHtml } from "@/lib/markdown-html"
+import { selectionFromElement } from "@/lib/selection-utils"
 
 const source = [
   "# Workflow Gates",
@@ -49,6 +50,17 @@ test("renderMarkdownBlockHtml adds finer list and code source anchors", () => {
     .toEqual(["16", "17", "18", "19"])
 })
 
+test("rendered change markers stay on the exact list item instead of the whole list", () => {
+  const list = buildMarkdownBlocks(source).find((block) => block.startLine === 9)
+  if (list == null) throw new Error("fixture list missing")
+
+  const host = htmlHost(renderMarkdownBlockHtml(list, new Set([10])).html)
+  const items = Array.from(host.querySelectorAll<HTMLElement>("li"))
+
+  expect(items.map((item) => item.dataset.change ?? null)).toEqual([null, "current", null])
+  expect(host.querySelector("ol, ul")?.hasAttribute("data-change")).toBe(false)
+})
+
 test("renderMarkdownBlockHtml sanitizes raw markdown HTML", () => {
   const [block] = buildMarkdownBlocks('<img src="x" onerror="alert(1)">')
   if (block == null) throw new Error("fixture block missing")
@@ -57,6 +69,65 @@ test("renderMarkdownBlockHtml sanitizes raw markdown HTML", () => {
 
   expect(host.innerHTML).not.toContain("onerror")
   expect(host.querySelector("img")?.getAttribute("src")).toBe("x")
+})
+
+test("document HTML cannot forge provenance or shift an outer list item anchor", () => {
+  const forged = [
+    '<span data-source-line="1" data-source-end-line="999" data-change="current">forged</span>',
+    "",
+    "- real item",
+    "  <ul><li data-source-line=\"1\">raw item</li></ul>",
+  ].join("\n")
+  const blocks = buildMarkdownBlocks(forged)
+  const rendered = blocks.map((block) => renderMarkdownBlockHtml(block, new Set([1, 3])))
+  const html = rendered.map((block) => block.html).join("")
+  const host = htmlHost(html)
+
+  const items = Array.from(host.querySelectorAll<HTMLElement>("li"))
+  expect(host.querySelector("[data-source-end-line='999']")).toBeNull()
+  expect(items[0]).toHaveAttribute("data-change", "current")
+  expect(items[0]?.querySelector(".rendered-change-label")).toHaveTextContent("Changed")
+  expect(items[1]).not.toHaveAttribute("data-source-line")
+  expect(rendered.flatMap((block) => block.markedChangedLines)).toEqual([3])
+})
+
+test("nested list changes mark the smallest outer item range with provenance", () => {
+  const [block] = buildMarkdownBlocks("- alpha\n  - nested\n- beta")
+  if (block == null) throw new Error("fixture block missing")
+  const rendered = renderMarkdownBlockHtml(block, new Set([2]))
+  const host = htmlHost(rendered.html)
+  const items = Array.from(host.querySelectorAll<HTMLElement>("li"))
+
+  expect(items[0]).toHaveAttribute("data-source-line", "1")
+  expect(items[0]).toHaveAttribute("data-source-end-line", "2")
+  expect(items[0]).toHaveAttribute("data-change", "current")
+  expect(items[0]?.querySelector(".rendered-change-label")).toHaveTextContent("Changed")
+  expect(items[1]).not.toHaveAttribute("data-source-line")
+  expect(items[2]).toHaveAttribute("data-source-line", "3")
+  expect(rendered.markedChangedLines).toEqual([2])
+})
+
+test("changed code lines have a real textual marker", () => {
+  const code = buildMarkdownBlocks(source).find((block) => block.startLine === 15)
+  if (code == null) throw new Error("fixture code block missing")
+  const rendered = renderMarkdownBlockHtml(code, new Set([17]))
+  const host = htmlHost(rendered.html)
+  const changed = host.querySelector<HTMLElement>("[data-source-line='17']")
+
+  expect(changed).toHaveAttribute("data-change", "current")
+  expect(changed?.querySelector(".rendered-change-label")).toHaveTextContent("Changed")
+  expect(rendered.markedChangedLines).toEqual([17])
+})
+
+test("source selection rejects forged or reversed line ranges", () => {
+  const host = htmlHost('<span data-source-line="99">past end</span><span data-source-line="2" data-source-end-line="1">reversed</span>')
+  const lines = [
+    { number: 1, text: "one", kind: "normal" as const, sectionTitle: null },
+    { number: 2, text: "two", kind: "normal" as const, sectionTitle: null },
+  ]
+
+  expect(selectionFromElement(host.children[0]!, lines)).toBeNull()
+  expect(selectionFromElement(host.children[1]!, lines)).toBeNull()
 })
 
 test("renderMarkdownBlockHtml identifies fenced SVG artifacts after sanitizing", () => {

@@ -95,7 +95,36 @@
 }
 
 .markdown-block.selected {
-  box-shadow: inset 0 0 0 1px var(--border);
+  box-shadow: inset 2px 0 0 var(--foreground);
+}
+
+.markdown-block.changed {
+  box-shadow: inset 2px 0 0 var(--ok);
+}
+
+.markdown-block.changed.selected {
+  box-shadow: inset 2px 0 0 var(--ok), inset 0 -1px 0 var(--foreground);
+}
+
+.markdown-block [data-change="current"] {
+  border-left: 2px solid var(--ok);
+  padding-left: 0.65rem;
+}
+
+.markdown-block .rendered-change-label {
+  color: var(--ok);
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1.25;
+  margin-right: 0.55rem;
+  user-select: none;
+  vertical-align: 0.12em;
+}
+
+.markdown-block pre code [data-change="current"] {
+  display: block;
 }
 
 .markdown-block[data-severity]::before {
@@ -137,6 +166,14 @@
   font-weight: 650;
   line-height: 1.25;
   margin: 1.4rem 0 0.6rem;
+}
+
+.markdown-block > div > :first-child {
+  margin-top: 0;
+}
+
+.markdown-block > div > :last-child {
+  margin-bottom: 0;
 }
 
 .markdown-body h1 { font-size: 1.7rem; }

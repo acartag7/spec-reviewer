@@ -102,7 +102,9 @@ Useful flags:
 - `--json`: print machine-readable output for agents.
 - `--open` / `--no-open`: control browser opening.
 - `--port <port>`: bind a specific local port.
-- `--storage-dir <path>`: use isolated local state.
+- `--storage-dir <path>`: use isolated local state; round writes tighten existing
+  real storage components to `0700` and reject symlinks. Its filesystem must
+  support same-directory hard links.
 
 Do not add standalone `export` or `verify` commands for v1. The existing
 feedback export remains an internal API/UI feature used by Copy Feedback and

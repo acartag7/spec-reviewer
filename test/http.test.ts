@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { request as httpRequest } from "node:http";
+import { mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { pathKey } from "../src/domain/ids.ts";
 import { ReviewerService } from "../src/application/reviewer-service.ts";
 import { ReviewSessionWaiter } from "../src/application/review-session.ts";
 import { FileDocumentReader } from "../src/infrastructure/file-document-reader.ts";
 import { JsonReviewStore } from "../src/infrastructure/json-review-store.ts";
+import { JsonReviewRoundStore } from "../src/infrastructure/json-review-round-store.ts";
 import { createHttpServer } from "../src/interfaces/http/http-server.ts";
 import type { AppConfig } from "../src/config.ts";
+import { json, rawStatus, serverPort } from "./http-test-utils.ts";
 
 test("HTTP API opens, saves, and exports a review", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "spec-reviewer-"));
@@ -29,7 +31,7 @@ test("HTTP API opens, saves, and exports a review", async (t) => {
     openBrowser: false,
     source: { maxFileLines: 250 },
   };
-  const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir));
+  const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir), new JsonReviewRoundStore(config.storageDir));
   const server = createHttpServer(config, service, join(process.cwd(), "public"));
   t.after(() => server.close());
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -97,7 +99,7 @@ test("HTTP API resolves moved annotation anchors without changing saved lines", 
     openBrowser: false,
     source: { maxFileLines: 250 },
   };
-  const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir));
+  const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir), new JsonReviewRoundStore(config.storageDir));
   const server = createHttpServer(config, service, join(process.cwd(), "public"));
   t.after(() => server.close());
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -160,7 +162,7 @@ test("HTTP server rejects non-loopback Host and Origin headers", async (t) => {
     openBrowser: false,
     source: { maxFileLines: 250 },
   };
-  const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir));
+  const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir), new JsonReviewRoundStore(config.storageDir));
   const server = createHttpServer(config, service, join(process.cwd(), "public"));
   t.after(() => server.close());
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -197,7 +199,7 @@ test("HTTP API finish resolves a waiting review session", async (t) => {
     openBrowser: false,
     source: { maxFileLines: 250 },
   };
-  const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir));
+  const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir), new JsonReviewRoundStore(config.storageDir));
   const waiter = new ReviewSessionWaiter(docPath);
   const server = createHttpServer(config, service, join(process.cwd(), "public"), waiter);
   t.after(() => server.close());
@@ -222,28 +224,6 @@ test("HTTP API finish resolves a waiting review session", async (t) => {
   assert.equal(response.status, "finished");
   assert.equal(completion.status, "finished");
   assert.match(completion.status === "finished" ? completion.markdown : "", /Fix this/);
+  const rounds = await readdir(join(config.storageDir, "rounds", pathKey(docPath)));
+  assert.equal(rounds.filter((name) => name.endsWith(".json")).length, 1);
 });
-
-async function json(url: string, init?: RequestInit): Promise<any> {
-  const response = await fetch(url, init);
-  const data = await response.json();
-  if (!response.ok) throw new Error(JSON.stringify(data));
-  return data;
-}
-
-function serverPort(server: ReturnType<typeof createHttpServer>): number {
-  const address = server.address();
-  if (address == null || typeof address === "string") throw new Error("HTTP server has no TCP port");
-  return address.port;
-}
-
-async function rawStatus(port: number, path: string, headers: Record<string, string>) {
-  return new Promise<{ status: number; headers: Record<string, string | string[] | undefined> }>((resolve, reject) => {
-    const req = httpRequest({ host: "127.0.0.1", port, path, headers }, (res) => {
-      res.resume();
-      res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: res.headers }));
-    });
-    req.on("error", reject);
-    req.end();
-  });
-}

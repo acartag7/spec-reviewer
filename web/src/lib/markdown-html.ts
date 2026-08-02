@@ -2,9 +2,12 @@ import DOMPurify from "dompurify"
 import { marked } from "marked"
 import type { MarkdownBlock, SourceAnchor } from "@/lib/markdown-provenance"
 
+const forbiddenProvenanceAttributes = ["data-source-line", "data-source-end-line", "data-change"]
+
 export interface RenderedBlockHtml {
   html: string
   artifact: ArtifactHtml | null
+  markedChangedLines: number[]
 }
 
 export interface ArtifactHtml {
@@ -13,10 +16,14 @@ export interface ArtifactHtml {
   source: string
 }
 
-export function renderMarkdownBlockHtml(block: MarkdownBlock): RenderedBlockHtml {
+export function renderMarkdownBlockHtml(
+  block: MarkdownBlock,
+  changedLines: ReadonlySet<number> = new Set(),
+): RenderedBlockHtml {
   if (block.artifact != null) {
     return {
       html: "",
+      markedChangedLines: [],
       artifact: {
         kind: block.artifact.kind,
         html: sanitizeArtifact(block.artifact.source, block.artifact.kind),
@@ -25,18 +32,43 @@ export function renderMarkdownBlockHtml(block: MarkdownBlock): RenderedBlockHtml
     }
   }
   const rawArtifact = rawArtifactFromBlock(block.raw)
-  if (rawArtifact != null) return { html: "", artifact: rawArtifact }
+  if (rawArtifact != null) return { html: "", artifact: rawArtifact, markedChangedLines: [] }
   const dirty = marked.parse(block.raw, { async: false, gfm: true, breaks: false }) as string
-  const clean = DOMPurify.sanitize(dirty, { USE_PROFILES: { html: true } })
+  const clean = sanitizeHtml(dirty, { html: true })
   const template = document.createElement("template")
   template.innerHTML = clean
   applyListAnchors(template.content, block.anchors.filter((anchor) => anchor.kind === "list-item"))
   applyCodeLineAnchors(template.content, block.anchors.filter((anchor) => anchor.kind === "code-line"))
-  return { html: template.innerHTML, artifact: null }
+  const markedChangedLines = applyChangeMarkers(template.content, changedLines)
+  return { html: template.innerHTML, artifact: null, markedChangedLines }
+}
+
+function applyChangeMarkers(root: DocumentFragment, changedLines: ReadonlySet<number>): number[] {
+  const marked = new Set<number>()
+  for (const element of root.querySelectorAll<HTMLElement>("[data-source-line]")) {
+    const start = Number(element.dataset.sourceLine)
+    const end = Number(element.dataset.sourceEndLine ?? element.dataset.sourceLine)
+    if (!overlapsChangedLine(changedLines, start, end)) continue
+    element.dataset.change = "current"
+    element.prepend(changeLabel())
+    for (let line = start; line <= end; line += 1) if (changedLines.has(line)) marked.add(line)
+  }
+  return Array.from(marked)
+}
+
+function changeLabel(): HTMLSpanElement {
+  const label = document.createElement("span")
+  label.className = "rendered-change-label"
+  label.textContent = "Changed"
+  return label
 }
 
 function applyListAnchors(root: DocumentFragment, anchors: SourceAnchor[]) {
-  const items = Array.from(root.querySelectorAll("li"))
+  const lists = Array.from(root.querySelectorAll<HTMLElement>("ol, ul"))
+    .filter((list) => list.parentElement?.closest("ol, ul") == null)
+  const items = lists.flatMap((list) => Array.from(list.children)
+    .filter((item): item is HTMLElement => item instanceof HTMLElement && item.tagName === "LI"))
+  if (items.length !== anchors.length) return
   anchors.forEach((anchor, index) => {
     const item = items[index]
     if (item != null) setSourceAnchor(item, anchor)
@@ -63,11 +95,25 @@ function setSourceAnchor(element: HTMLElement, anchor: SourceAnchor) {
   element.dataset.sourceEndLine = String(anchor.lineEnd)
 }
 
+function overlapsChangedLine(lines: ReadonlySet<number>, start: number, end: number): boolean {
+  for (let line = start; line <= end; line += 1) if (lines.has(line)) return true
+  return false
+}
+
 function sanitizeArtifact(source: string, kind: ArtifactHtml["kind"]): string {
   if (kind === "svg") {
-    return DOMPurify.sanitize(source, { USE_PROFILES: { svg: true, svgFilters: true } })
+    return sanitizeHtml(source, { svg: true, svgFilters: true })
   }
-  return DOMPurify.sanitize(source, { USE_PROFILES: { html: true } })
+  return sanitizeHtml(source, { html: true })
+}
+
+function sanitizeHtml(source: string, profile: { html?: boolean; svg?: boolean; svgFilters?: boolean }): string {
+  return DOMPurify.sanitize(source, {
+    USE_PROFILES: profile,
+    ALLOW_DATA_ATTR: false,
+    ADD_ATTR: ["data-artifact"],
+    FORBID_ATTR: forbiddenProvenanceAttributes,
+  })
 }
 
 function rawArtifactFromBlock(raw: string): ArtifactHtml | null {

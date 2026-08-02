@@ -75,6 +75,13 @@ Spec Reviewer can read files the local user asks it to review. That is the main 
 - Review data and copied documents are local files, not encrypted secrets.
 - Review and copied-document subdirectories are set to `0700`; stored files are
   replaced through private `0600` temporary files and atomic rename.
+- Completed review rounds contain exact local source snapshots. The storage-root
+  leaf and nested round directories are verified as real directories, never
+  symlinks. Reads do not alter their modes. Before a round write, existing real
+  components are tightened to `0700` and missing components are created as
+  `0700`; ancestors above the configured root remain an operator precondition.
+  Immutable final files are committed from synced `0600` temporary files without
+  overwrite.
 
 Do not review sensitive files from a directory where other local users or processes can read the resulting storage directory.
 
@@ -88,12 +95,19 @@ Default subdirectories:
 
 - `~/.spec-reviewer/reviews` for review JSON
 - `~/.spec-reviewer/documents` for dropped documents
+- `~/.spec-reviewer/rounds` for immutable completed-review evidence
 
 The storage root can be changed with `--storage-dir` or `SPEC_REVIEWER_STORAGE_DIR`.
 Stored review JSON is shape-validated on every read. A malformed record fails the
 operation instead of being skipped. Multiple Spec Reviewer processes sharing one
 storage directory are unsupported; atomic files prevent torn data, not
-cross-process lost updates.
+cross-process active-review lost updates. Round Finish publication has a
+per-document exclusive lock, a 100-round cap, and no-overwrite final files.
+Malformed latest round evidence degrades the diff to unavailable instead of
+blocking access to the reviewed document or notes.
+The configured storage filesystem must support same-directory hard links;
+Finish fails closed with a fixed storage error when that commit primitive is
+unavailable.
 
 ## Known Limits
 

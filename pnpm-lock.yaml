@@ -26,6 +26,9 @@ importers:
       clsx:
         specifier: 2.1.1
         version: 2.1.1
+      diff:
+        specifier: 8.0.4
+        version: 8.0.4
       dompurify:
         specifier: 3.4.7
         version: 3.4.7

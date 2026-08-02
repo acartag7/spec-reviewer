@@ -32,7 +32,8 @@ Response:
     "annotations": []
   },
   "stale": false,
-  "sourceState": "current"
+  "sourceState": "current",
+  "comparison": { "state": "unavailable", "reason": "no-baseline" }
 }
 ```
 
@@ -51,6 +52,14 @@ manually rechecked before sending feedback to an agent.
 
 Saving a changed review does not clear the changed state. A later explicit anchor
 re-sync flow should be responsible for clearing stale state.
+
+`comparison.state` is `diff`, `unchanged`, `too-large`, or `unavailable`.
+Completed waiting sessions provide the baseline. A `diff` response contains
+bounded unified rows with old/new line numbers, added/removed totals, and gap
+counts; it never sends duplicate raw source snapshots to the browser. An invalid
+latest round degrades only comparison to `baseline-unavailable` and never falls
+back to older evidence. A pre-upgrade review reports `no-baseline`, and immutable
+uploaded paths report `immutable-upload`.
 
 ## Save Review
 
@@ -151,8 +160,8 @@ form contents so the feedback can be corrected and retried.
 Open and resolved annotations are shown separately. Reviewers can resolve or
 reopen a note directly, and editing preserves both its status and agent action.
 
-Saving against a changed document does not silently advance the saved digest or
-resolve feedback. Explicit review-round semantics are a separate contract.
+Saving against a changed document does not silently advance the saved digest,
+resolve feedback, or create a completed review round.
 
 ## Export
 
@@ -198,15 +207,24 @@ or session completion. The UI always sends the configured waiting-session path,
 not whichever document is currently visible.
 
 The first path-valid terminal request claims the session synchronously before any
-await. A concurrent Finish, Cancel, or repeat request shares that first attempt's
-result, so the terminal active-time delta is consumed at most once. A failed
-attempt releases the claim and leaves the session waiting; its terminal delta may
-be lost but is never applied again by that session. A later Cancel can therefore
-end a session whose source document disappeared. Cancel does not need to read or
-export the source file; if stored review state exists it adds the delta there,
-otherwise it returns the session delta without materializing an invalid review.
-The UI renders the returned terminal status even when another tab claimed the
-opposite action first.
+await and creates one stable round identity and completion time. A concurrent
+Finish, Cancel, or repeat request shares that first attempt's result. The waiter
+retains the first terminal active-time delta until the service confirms its
+durable metrics write. A retry before confirmation receives the same delta; a
+retry after confirmation receives no delta. This prevents both loss before a
+round write and duplication after one.
+
+A failed attempt releases the terminal claim but retains that stable identity.
+A later Cancel can end a session whose source document disappeared. Cancel does
+not need to read or export the source file; if stored review state exists it adds
+the delta there, otherwise it returns the session delta without materializing an
+invalid review. The UI renders the returned terminal status even when another
+tab claimed the opposite action first.
+
+Finish first persists terminal metrics, then commits one immutable round. A
+valid existing file for the stable identity proves an earlier attempt committed
+and is returned without rebuilding edited live state. Cancel never creates a
+round. Finishing an unchanged source still records a distinct round.
 
 ## Review Storage Integrity
 
@@ -244,8 +262,31 @@ directory is unsupported and can still cause last-write-wins replacement; atomic
 rename prevents torn files, not cross-process lost updates. Same-user filesystem
 replacement races after directory verification are also out of scope.
 
-This integrity contract does not add immutable run history, review outcome
-taxonomy, automatic port selection, or installed-version reporting.
+## Immutable Review Rounds
+
+Successful waiting-session finishes are stored under
+`rounds/<path-key>/<epoch-ms>-<random-id>.json`. The storage-root leaf, `rounds`,
+and path-key directory must each be real directories, never symlinks. Reads do
+not alter their modes. Before a round write, existing real components are
+tightened to `0700` and missing components are created as `0700`. Existing
+ancestors above the configured root are an operator precondition. A per-document
+exclusive Finish lock serializes cross-process round publication and the
+100-round cap. Stale locks fail closed and require local operator cleanup.
+
+Round content is validated before filesystem changes and capped at 32 MiB. The
+writer syncs an exclusive `0600` temporary file, hard-links it to the final name
+without overwrite, syncs the directory, and removes the temporary file. The hard
+link is the completion commit. A final round is immutable; an existing malformed
+or identity-mismatched collision fails closed. Hidden temporary and lock files
+are never read as evidence.
+
+The latest allowlisted filename is the only baseline read on open. Its schema,
+path, filename, timestamp, digest/content binding, annotations, size, and private
+file mode are validated. Read failure disables only the comparison. New Finish
+writes still fail closed on unsafe storage or corrupt collisions.
+
+This integrity contract does not add review outcome taxonomy, automatic port
+selection, installed-version reporting, pruning, or history recovery UI.
 
 ## Local Server Security
 
