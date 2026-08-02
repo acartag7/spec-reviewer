@@ -35,10 +35,12 @@ export function useReviewDraft(initialSelection: SelectionRange, initialFormSele
       updateForm(emptyForm(submittedSelection))
     }
   }, [updateForm])
-  const reconcileSavedAnnotation = useCallback((id: string, saved: Annotation | undefined) => {
-    if (formRef.current.id !== id) return
-    if (saved == null) resetDraft(initialSelection, initialFormSelection)
-    else updateForm({ ...formRef.current, status: saved.status })
+  const reconcileSavedAnnotation = useCallback((id: string, saved: Annotation | undefined, submitted: AnnotationFormValue) => {
+    const current = formRef.current
+    if (current.id !== id) return
+    if (saved == null) {
+      if (current === submitted) resetDraft(initialSelection, initialFormSelection)
+    } else if (current.status === submitted.status) updateForm({ ...current, status: saved.status })
   }, [initialFormSelection, initialSelection, resetDraft, updateForm])
 
   return { selection, selectionRef, form, formRef, updateForm, resetDraft, selectLines, resetForm, clearSubmittedForm, reconcileSavedAnnotation }

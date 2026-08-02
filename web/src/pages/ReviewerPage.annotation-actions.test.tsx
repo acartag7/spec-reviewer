@@ -45,6 +45,37 @@ test.each([
   await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Feedback ready below"))
 })
 
+test.each(["success", "reload"] as const)("preserves edits made while a deletion settles on %s", async (outcome) => {
+  let stored = reviewAt(0, [annotation])
+  let completeSave!: (response: Response) => void
+  const pendingSave = new Promise<Response>((resolve) => { completeSave = resolve })
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url === "/api/config") return json({ defaultDocumentPath: null, waitForReview: false })
+    if (url === "/api/reviews") return json([])
+    if (url.startsWith("/api/export?")) return json({ markdown: "# Agent Review Feedback" })
+    if (url.startsWith("/api/document?")) return json({ document: documentFixture, review: stored, stale: false, sourceState: "current" })
+    if (url === "/api/review" && init?.method === "POST") {
+      const body = JSON.parse(init.body as string) as { annotations: Annotation[] }
+      stored = reviewAt(1, body.annotations)
+      return pendingSave
+    }
+    return json({ error: { code: "not_found", message: "Not found" } }, 404)
+  })
+
+  renderPage()
+  fireEvent.click(await screen.findByRole("tab", { name: /Notes/ }))
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+  fireEvent.click(screen.getByRole("tab", { name: /Notes/ }))
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }))
+  fireEvent.click(screen.getByRole("tab", { name: "Feedback" }))
+  fireEvent.change(screen.getByRole("textbox", { name: "Feedback" }), { target: { value: "Keep this newer draft" } })
+  completeSave(outcome === "success" ? json(stored) : json({ error: { code: "storage_commit_indeterminate", message: "Commit outcome unknown" } }, 500))
+
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(outcome === "success" ? "Saved" : "Reloaded the saved review"))
+  expect(screen.getByRole("textbox", { name: "Feedback" })).toHaveValue("Keep this newer draft")
+})
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   render(

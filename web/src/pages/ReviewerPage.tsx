@@ -103,7 +103,7 @@ export function ReviewerPage() {
       setReview(saved)
       confirmedReviewRef.current = saved
       if (intent.clearFormOnSuccess) clearSubmittedForm(intent.submittedForm, intent.submittedSelection)
-      if (intent.reconcileFormId != null) reconcileSavedAnnotation(intent.reconcileFormId, saved.annotations.find((item) => item.id === intent.reconcileFormId))
+      if (intent.reconcileFormId != null) reconcileSavedAnnotation(intent.reconcileFormId, saved.annotations.find((item) => item.id === intent.reconcileFormId), intent.submittedForm)
       if (intent.submittedSummary != null) settleSubmittedSummary(intent.submittedSummary, saved.summary)
       setSourceState((state) => (state === "changed" ? "changed" : "current"))
       void queryClient.invalidateQueries({ queryKey: ["reviews"] })
@@ -118,7 +118,7 @@ export function ReviewerPage() {
         setReview,
         (result) => {
           if (confirmedSummary != null && summaryRef.current === confirmedSummary) updateSummary(result.review.summary)
-          if (intent.reconcileFormId != null) reconcileSavedAnnotation(intent.reconcileFormId, result.review.annotations.find((item) => item.id === intent.reconcileFormId))
+          if (intent.reconcileFormId != null) reconcileSavedAnnotation(intent.reconcileFormId, result.review.annotations.find((item) => item.id === intent.reconcileFormId), intent.submittedForm)
           applyOpenResult(result, false)
         },
       )
