@@ -226,9 +226,13 @@ the standard remove/add rows representing the changed line do.
 The browser receives structured rows from the loopback API and still treats row
 text as untrusted display text. Rows render through React text nodes only. They
 never use raw HTML or `dangerouslySetInnerHTML`. Each row uses left-to-right
-isolation. An ASCII-printable allowlist renders every control and every non-
-ASCII code point as a visible Unicode code-point label, so an unlisted invisible
-character cannot reorder or conceal apparent evidence.
+isolation. Ordinary printable Unicode, including accented text, CJK, and emoji
+with joiners, remains readable. C0/C1 controls other than tab and line feed,
+bidi controls, line and paragraph separators, and explicitly enumerated
+invisible formatting characters render as visible `[U+XXXX]` labels. The
+enumerated set includes soft hyphen, Mongolian vowel separator, zero-width
+space, word/invisible-operator controls, byte-order mark, and Unicode tag
+characters, so hidden formatting cannot reorder or conceal apparent evidence.
 
 The view is a unified diff, not a side-by-side layout. It collapses unchanged
 regions outside three context lines. Gap rows state both hidden old-line and
