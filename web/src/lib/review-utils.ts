@@ -45,8 +45,8 @@ export function hasAnnotationDraft(form: AnnotationFormValue, annotations: Annot
     || form.severity !== saved.severity
     || form.kind !== saved.kind
     || form.status !== saved.status
-    || form.note.trim() !== saved.note
-    || form.agentAction.trim() !== saved.agentAction
+    || form.note.trim() !== saved.note.trim()
+    || form.agentAction.trim() !== saved.agentAction.trim()
 }
 
 export interface AnchorDriftSummary {
