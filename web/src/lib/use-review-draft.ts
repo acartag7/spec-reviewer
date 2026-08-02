@@ -2,10 +2,10 @@ import { useCallback, useRef, useState } from "react"
 import type { SelectionRange } from "@/api/types"
 import { emptyForm, type AnnotationFormValue } from "@/lib/review-utils"
 
-export function useReviewDraft(initialSelection: SelectionRange) {
+export function useReviewDraft(initialSelection: SelectionRange, initialFormSelection = initialSelection) {
   const [selection, setSelection] = useState(initialSelection)
   const selectionRef = useRef(selection)
-  const [form, setForm] = useState<AnnotationFormValue>(() => emptyForm(initialSelection))
+  const [form, setForm] = useState<AnnotationFormValue>(() => emptyForm(initialFormSelection))
   const formRef = useRef(form)
 
   const updateSelection = useCallback((next: SelectionRange) => {
@@ -16,9 +16,9 @@ export function useReviewDraft(initialSelection: SelectionRange) {
     formRef.current = next
     setForm(next)
   }, [])
-  const resetDraft = useCallback((next: SelectionRange) => {
+  const resetDraft = useCallback((next: SelectionRange, formSelection = next) => {
     updateSelection(next)
-    updateForm(emptyForm(next))
+    updateForm(emptyForm(formSelection))
   }, [updateForm, updateSelection])
   const selectLines = useCallback((next: SelectionRange) => {
     updateSelection(next)

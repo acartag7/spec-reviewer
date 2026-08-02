@@ -10,13 +10,15 @@ import { AppError } from "../src/domain/errors.ts";
 import { createEmptyReview, withResolvedAnchors } from "../src/domain/review.ts";
 import { FileDocumentReader } from "../src/infrastructure/file-document-reader.ts";
 import { JsonReviewStore } from "../src/infrastructure/json-review-store.ts";
+import { JsonReviewRoundStore } from "../src/infrastructure/json-review-round-store.ts";
 
 async function fresh(content = "# Spec\n\nSource line\n") {
   const dir = await mkdtemp(join(tmpdir(), "spec-reviewer-integrity-"));
   const path = join(dir, "spec.md");
   await writeFile(path, content, "utf8");
-  const store = new JsonReviewStore(join(dir, "store"));
-  return { dir, path, store, service: new ReviewerService(new FileDocumentReader(), store) };
+  const storageDir = join(dir, "store");
+  const store = new JsonReviewStore(storageDir);
+  return { dir, path, store, service: new ReviewerService(new FileDocumentReader(), store, new JsonReviewRoundStore(storageDir)) };
 }
 
 function annotation(overrides: Record<string, unknown> = {}) {
@@ -226,21 +228,19 @@ test("legacy span errors explain that deletion or range reduction is required", 
     agentAction: "", createdAt: "legacy", updatedAt: "legacy", anchorText: "Source line",
   }));
   await store.save(legacy);
-  await assert.rejects(
-    service.saveReview({ path, baseRevision: 0, annotations: legacy.annotations }),
-    (error) => error instanceof AppError && /delete annotations or reduce their ranges/.test(error.message),
-  );
+  await assert.rejects(service.saveReview({ path, baseRevision: 0, annotations: legacy.annotations }),
+    (error) => error instanceof AppError && /delete annotations or reduce their ranges/.test(error.message));
 });
 
 test("a metric storage failure reports both the content rejection and persistence failure", async () => {
-  const { path, store } = await fresh();
+  const { dir, path, store } = await fresh();
   const failingStore: ReviewStore = {
     load: (value) => store.load(value),
     loadById: (value) => store.loadById(value),
     listRecent: (value) => store.listRecent(value),
     save: async () => { throw new AppError("storage_write_failed", 500, "Review storage write failed"); },
   };
-  const service = new ReviewerService(new FileDocumentReader(), failingStore);
+  const service = new ReviewerService(new FileDocumentReader(), failingStore, new JsonReviewRoundStore(join(dir, "rounds-store")));
   await assert.rejects(
     service.saveReview({ path, baseRevision: 0, annotations: [annotation({ note: " " })], activeMsDelta: 1 }),
     (error) => error instanceof AppError

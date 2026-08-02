@@ -58,6 +58,7 @@ async function smokeServer() {
 async function smokeWaitWorkflow() {
   const port = await freePort();
   const doc = writeFixture("wait.md");
+  const storage = join(temp, "wait-store");
   const child = spawn(binary, [
     "review",
     "--wait",
@@ -66,7 +67,7 @@ async function smokeWaitWorkflow() {
     "--port",
     String(port),
     "--storage-dir",
-    join(temp, "wait-store"),
+    storage,
     doc,
   ], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
   const output = collectOutput(child);
@@ -101,6 +102,35 @@ async function smokeWaitWorkflow() {
   const completion = JSON.parse(output.stdout.trim());
   if (completion.status !== "finished" || !completion.markdown.includes("Fix smoke note")) {
     throw new Error("Wait workflow did not print finished feedback JSON");
+  }
+
+  writeFileSync(doc, "# Smoke\n\nVersion B\nAdded line\n", "utf8");
+  const secondPort = await freePort();
+  const second = spawn(binary, [
+    "review",
+    "--no-open",
+    "--port",
+    String(secondPort),
+    "--storage-dir",
+    storage,
+    doc,
+  ], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+  const secondOutput = collectOutput(second);
+  try {
+    const secondBase = `http://127.0.0.1:${secondPort}`;
+    await waitForHealth(secondBase);
+    const opened = await jsonFetch(`${secondBase}/api/document?path=${encodeURIComponent(doc)}`);
+    if (opened.comparison?.state !== "diff" || opened.comparison.added !== 2 || opened.comparison.removed !== 1) {
+      throw new Error("Second launch did not expose exact diff totals");
+    }
+    const rows = opened.comparison.rows;
+    if (!rows.some((row) => row.kind === "remove" && row.text === "Needs review")
+      || !rows.some((row) => row.kind === "add" && row.text === "Version B")
+      || !rows.some((row) => row.kind === "add" && row.text === "Added line")) {
+      throw new Error("Second launch did not expose exact red-green rows");
+    }
+  } finally {
+    await stopChild(second, secondOutput);
   }
 }
 

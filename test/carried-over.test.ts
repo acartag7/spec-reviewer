@@ -7,6 +7,7 @@ import { ReviewerService } from "../src/application/reviewer-service.ts";
 import { ReviewSessionWaiter } from "../src/application/review-session.ts";
 import { FileDocumentReader } from "../src/infrastructure/file-document-reader.ts";
 import { JsonReviewStore } from "../src/infrastructure/json-review-store.ts";
+import { JsonReviewRoundStore } from "../src/infrastructure/json-review-round-store.ts";
 import { createHttpServer } from "../src/interfaces/http/http-server.ts";
 import type { AppConfig } from "../src/config.ts";
 
@@ -29,7 +30,11 @@ test("stale unresolved annotations stay visible and actionable", async (t) => {
     openBrowser: false,
     source: { maxFileLines: 250 },
   };
-  const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir));
+  const service = new ReviewerService(
+    new FileDocumentReader(),
+    new JsonReviewStore(config.storageDir),
+    new JsonReviewRoundStore(config.storageDir),
+  );
   const waiter = new ReviewSessionWaiter(docPath);
   const server = createHttpServer(config, service, join(process.cwd(), "public"), waiter);
   t.after(() => server.close());

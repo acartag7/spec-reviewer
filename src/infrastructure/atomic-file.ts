@@ -49,7 +49,7 @@ export async function atomicWritePrivateFile(directory: string, destination: str
   }
 }
 
-async function ensurePrivateDirectory(directory: string): Promise<void> {
+export async function ensurePrivateDirectory(directory: string): Promise<void> {
   try {
     await mkdir(directory, { recursive: true, mode: 0o700 });
     const info = await lstat(directory);
@@ -61,13 +61,34 @@ async function ensurePrivateDirectory(directory: string): Promise<void> {
   }
 }
 
+export async function ensurePrivateChildDirectory(parent: string, name: string): Promise<string> {
+  await ensurePrivateDirectory(parent);
+  const directory = join(parent, name);
+  try {
+    await mkdir(directory, { mode: 0o700 });
+  } catch (error) {
+    if (!(typeof error === "object" && error != null && "code" in error && error.code === "EEXIST")) {
+      throw new AppError("storage_path_unsafe", 500, "Storage directory is unavailable or unsafe");
+    }
+  }
+  try {
+    const info = await lstat(directory);
+    assertRealDirectory(info);
+    await chmod(directory, 0o700);
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError("storage_path_unsafe", 500, "Storage directory is unavailable or unsafe");
+  }
+  return directory;
+}
+
 function assertRealDirectory(info: Stats): void {
   if (info.isSymbolicLink() || !info.isDirectory()) {
     throw new AppError("storage_path_unsafe", 500, "Storage path must be a real directory");
   }
 }
 
-async function syncDirectory(directory: string): Promise<void> {
+export async function syncDirectory(directory: string): Promise<void> {
   const handle = await open(directory, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     await handle.sync();

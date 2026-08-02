@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "react-router-dom"
 import { api, recordActiveTime } from "@/api/client"
-import type { Annotation, OpenDocumentResult, Review, ReviewDocument, ReviewSourceState, SelectionRange } from "@/api/types"
+import type { Annotation, OpenDocumentResult, Review, ReviewComparison, ReviewDocument, ReviewSourceState, SelectionRange } from "@/api/types"
 import { StartScreen } from "@/components/StartScreen"
 import { SessionOutcomeScreen } from "@/components/SessionOutcomeScreen"
 import { StatusToast } from "@/components/StatusToast"
@@ -11,7 +11,7 @@ import { Workspace } from "@/components/Workspace"
 import { createAnnotation, formFromAnnotation, removeAnnotation, upsertAnnotation } from "@/lib/review-utils"
 import type { AnnotationFormValue } from "@/lib/review-utils"
 import { isMarkdownFile } from "@/lib/path-utils"
-import { scrollToLine } from "@/lib/scroll-to-line"
+import { NO_SELECTION } from "@/lib/selection-utils"
 import { recoverFailedSave } from "@/lib/save-recovery"
 import { useActiveReviewTime } from "@/lib/use-active-review-time"
 import { useReviewDraft } from "@/lib/use-review-draft"
@@ -28,8 +28,9 @@ export function ReviewerPage() {
   const requestedPath = searchParams.get("path") ?? ""
   const [document, setDocument] = useState<ReviewDocument | null>(null)
   const [review, setReview] = useState<Review | null>(null)
-  const { selection, selectionRef, form, formRef, updateForm, resetDraft, selectLines, resetForm, clearSubmittedForm } = useReviewDraft(initialSelection)
+  const { selection, selectionRef, form, formRef, updateForm, resetDraft, selectLines, clearSubmittedForm } = useReviewDraft(NO_SELECTION, initialSelection)
   const [sourceState, setSourceState] = useState<ReviewSourceState>("unreviewed")
+  const [comparison, setComparison] = useState<ReviewComparison>({ state: "unavailable", reason: "no-baseline" })
   const [status, setStatus] = useState("")
   const showStatus = useCallback((message: string) => {
     setStatus(message)
@@ -60,12 +61,12 @@ export function ReviewerPage() {
     enabled: document != null,
   })
   const applyOpenResult = useCallback((result: OpenDocumentResult, shouldResetDraft = true) => {
-    const nextSelection = { lineStart: 1, lineEnd: 1, selectedText: "" }
     setDocument(result.document)
     setReview(result.review)
     confirmedReviewRef.current = result.review
-    if (shouldResetDraft) resetDraft(nextSelection)
+    if (shouldResetDraft) resetDraft(NO_SELECTION, initialSelection)
     setSourceState(result.sourceState ?? (result.stale ? "changed" : "current"))
+    setComparison(result.comparison ?? { state: "unavailable", reason: "no-baseline" })
   }, [resetDraft])
   useEffect(() => {
     if (requestedPath === "" && configQuery.data?.defaultDocumentPath) {
@@ -212,6 +213,7 @@ export function ReviewerPage() {
           review={review}
           selection={selection}
           sourceState={sourceState}
+          comparison={comparison}
           form={form}
           exportMarkdown={exportQuery.data?.markdown ?? ""}
           exportLoading={exportQuery.isLoading || exportQuery.isFetching}
@@ -219,8 +221,7 @@ export function ReviewerPage() {
           onSelection={selectLines}
           onFormChange={updateForm}
           onFormSubmit={addOrUpdateAnnotation}
-          onFormReset={resetForm}
-          onOpenAnnotation={(annotation) => scrollToLine(annotation.lineStart)}
+          onFormReset={() => { window.getSelection()?.removeAllRanges(); resetDraft(NO_SELECTION, initialSelection) }}
           onEditAnnotation={(annotation) => updateForm(formFromAnnotation(annotation))}
           onStatusAnnotation={setAnnotationStatus}
           onDeleteAnnotation={deleteAnnotation}

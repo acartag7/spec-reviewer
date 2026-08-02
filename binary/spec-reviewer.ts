@@ -113,8 +113,8 @@ async function routeApi(
     if (waitSession == null) throw new AppError("invalid_request", 409, "No waiting review session");
     const action = readSessionAction(await readJson(request));
     const path = service.resolveDocumentPath(action.path);
-    return json(await waitSession.runTerminal(path, action.activeMsDelta, async (delta) => {
-      const exported = await service.finishReview(path, delta);
+    return json(await waitSession.runTerminal(path, action.activeMsDelta, async (terminal) => {
+      const exported = await service.finishReview(path, terminal);
       return { status: "finished" as const, path, ...exported };
     }));
   }
@@ -122,8 +122,8 @@ async function routeApi(
     if (waitSession == null) throw new AppError("invalid_request", 409, "No waiting review session");
     const action = readSessionAction(await readJson(request));
     const path = service.resolveDocumentPath(action.path);
-    return json(await waitSession.runTerminal(path, action.activeMsDelta, async (delta) => {
-      const activeMs = await service.cancelReview(path, delta);
+    return json(await waitSession.runTerminal(path, action.activeMsDelta, async (terminal) => {
+      const activeMs = await service.cancelReview(path, terminal);
       return { status: "canceled" as const, path, reason: action.reason, activeMs };
     }));
   }

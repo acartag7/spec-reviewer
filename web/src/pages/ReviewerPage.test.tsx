@@ -116,7 +116,7 @@ test("a rejected stale save reloads server state and allows the next save", asyn
     if (url.startsWith("/api/export?")) return json({ markdown: "# Agent Review Feedback" })
     if (url.startsWith("/api/document?")) {
       documentCalls += 1
-      return json({ document: documentFixture, review: reviewAt(documentCalls), stale: false, sourceState: "current" })
+      return json({ document: documentFixture, review: reviewAt(documentCalls), stale: false, sourceState: "current", comparison: { state: "unavailable", reason: "no-baseline" } })
     }
     if (url === "/api/review" && init?.method === "POST") {
       saveCalls += 1
@@ -150,8 +150,16 @@ test("a rejected stale save reloads server state and allows the next save", asyn
   fireEvent.click(screen.getByRole("button", { name: "Add note" }))
   await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Annotation was rejected"))
   expect(screen.getByRole("textbox", { name: "Feedback" })).toHaveValue("Fresh note")
+  const nativeRange = document.createRange()
+  nativeRange.selectNodeContents(screen.getByText("Target line", { selector: "p" }))
+  window.getSelection()?.removeAllRanges()
+  window.getSelection()?.addRange(nativeRange)
   fireEvent.click(screen.getByRole("button", { name: "Clear" }))
-  expect(screen.getByRole("spinbutton", { name: "Lines" })).toHaveValue(3)
+  expect(screen.getByRole("spinbutton", { name: "Lines" })).toHaveValue(1)
+  expect(screen.getByRole("spinbutton", { name: "To" })).toHaveValue(1)
+  expect(screen.getByRole("textbox", { name: "Selected source text" })).toHaveValue("")
+  expect(window.getSelection()?.rangeCount).toBe(0)
+  fireEvent.click(screen.getByText("Target line"))
   fireEvent.change(screen.getByRole("textbox", { name: "Feedback" }), { target: { value: "Fresh note" } })
   fireEvent.click(screen.getByRole("button", { name: "Add note" }))
   await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Saved"))

@@ -6,13 +6,15 @@ import { test } from "node:test";
 import { ReviewerService } from "../src/application/reviewer-service.ts";
 import { FileDocumentReader } from "../src/infrastructure/file-document-reader.ts";
 import { JsonReviewStore } from "../src/infrastructure/json-review-store.ts";
+import { JsonReviewRoundStore } from "../src/infrastructure/json-review-round-store.ts";
 
 async function freshService(): Promise<{ service: ReviewerService; store: JsonReviewStore; docPath: string }> {
   const dir = await mkdtemp(join(tmpdir(), "spec-reviewer-"));
   const docPath = join(dir, "README.md");
   await writeFile(docPath, "# Doc\n\nBody line\n", "utf8");
-  const store = new JsonReviewStore(join(dir, "store"));
-  const service = new ReviewerService(new FileDocumentReader(), store);
+  const storageDir = join(dir, "store");
+  const store = new JsonReviewStore(storageDir);
+  const service = new ReviewerService(new FileDocumentReader(), store, new JsonReviewRoundStore(storageDir));
   return { service, store, docPath };
 }
 

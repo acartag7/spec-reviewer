@@ -16,6 +16,7 @@ import {
 import { pathKey } from "../src/domain/ids.ts";
 import { FileDocumentReader } from "../src/infrastructure/file-document-reader.ts";
 import { JsonReviewStore } from "../src/infrastructure/json-review-store.ts";
+import { JsonReviewRoundStore } from "../src/infrastructure/json-review-round-store.ts";
 import { createHttpServer } from "../src/interfaces/http/http-server.ts";
 import type { AppConfig } from "../src/config.ts";
 
@@ -111,7 +112,11 @@ async function setup(wait: boolean): Promise<Setup> {
     openBrowser: false,
     source: { maxFileLines: 250 },
   };
-  const service = new ReviewerService(new FileDocumentReader(), new JsonReviewStore(config.storageDir));
+  const service = new ReviewerService(
+    new FileDocumentReader(),
+    new JsonReviewStore(config.storageDir),
+    new JsonReviewRoundStore(config.storageDir),
+  );
   const waiter = wait ? new ReviewSessionWaiter(docPath) : null;
   const server = createHttpServer(config, service, join(process.cwd(), "public"), waiter);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

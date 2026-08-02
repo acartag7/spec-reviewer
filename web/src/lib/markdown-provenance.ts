@@ -38,7 +38,6 @@ export function sourceTextForRange(lines: ReviewDocument["lines"], start: number
     .filter((line) => line.number >= start && line.number <= end)
     .map((line) => line.text)
     .join("\n")
-    .trim()
 }
 
 export function buildMarkdownBlocks(source: string): MarkdownBlock[] {

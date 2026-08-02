@@ -1,15 +1,28 @@
 import { AppError } from "../domain/errors.ts";
+import { randomUUID } from "node:crypto";
+
+export interface TerminalAttempt {
+  id: string;
+  completedAt: string;
+  activeMsDelta: unknown;
+  confirmActiveTime(): void;
+}
 
 export type ReviewCompletion =
   | { status: "finished"; path: string; markdown: string; openAnnotations: number; carriedOver: number; activeMs: number }
   | { status: "canceled"; path: string; reason: string | null; activeMs: number };
+
+let lastTerminalEpoch = 0;
 
 export class ReviewSessionWaiter {
   private readonly waitPromise: Promise<ReviewCompletion>;
   private resolveWait!: (completion: ReviewCompletion) => void;
   private completion: ReviewCompletion | null = null;
   private terminalAttempt: Promise<ReviewCompletion> | null = null;
-  private terminalDeltaConsumed = false;
+  private terminalIdentity: { id: string; completedAt: string } | null = null;
+  private terminalDelta: unknown;
+  private terminalDeltaClaimed = false;
+  private terminalDeltaConfirmed = false;
   readonly path: string;
 
   constructor(path: string) {
@@ -36,13 +49,13 @@ export class ReviewSessionWaiter {
   runTerminal(
     path: string,
     activeMsDelta: unknown,
-    operation: (claimedDelta: unknown) => Promise<ReviewCompletion>,
+    operation: (attempt: TerminalAttempt) => Promise<ReviewCompletion>,
   ): Promise<ReviewCompletion> {
     this.assertPath(path);
     if (this.completion != null) return Promise.resolve(this.completion);
     if (this.terminalAttempt != null) return this.terminalAttempt;
-    const claimedDelta = this.claimTerminalDelta(activeMsDelta);
-    const attempt = Promise.resolve().then(() => operation(claimedDelta)).then((completion) => {
+    const terminal = this.createTerminalAttempt(activeMsDelta);
+    const attempt = Promise.resolve().then(() => operation(terminal)).then((completion) => {
       return this.complete(completion);
     });
     this.terminalAttempt = attempt;
@@ -52,20 +65,24 @@ export class ReviewSessionWaiter {
     return attempt;
   }
 
-  finish(path: string, markdown: string, openAnnotations = 0, carriedOver = 0, activeMs = 0): ReviewCompletion {
-    this.assertPath(path);
-    return this.complete({ status: "finished", path, markdown, openAnnotations, carriedOver, activeMs });
-  }
-
-  cancel(path: string, reason: string | null, activeMs = 0): ReviewCompletion {
-    this.assertPath(path);
-    return this.complete({ status: "canceled", path, reason, activeMs });
-  }
-
-  private claimTerminalDelta(value: unknown): unknown {
-    if (value == null || this.terminalDeltaConsumed) return undefined;
-    this.terminalDeltaConsumed = true;
-    return value;
+  private createTerminalAttempt(value: unknown): TerminalAttempt {
+    if (this.terminalIdentity == null) {
+      const epoch = Math.max(Date.now(), lastTerminalEpoch + 1);
+      lastTerminalEpoch = epoch;
+      this.terminalIdentity = {
+        id: `${String(epoch).padStart(13, "0")}-${randomUUID().replaceAll("-", "")}`,
+        completedAt: new Date(epoch).toISOString(),
+      };
+    }
+    if (!this.terminalDeltaClaimed) {
+      this.terminalDelta = value;
+      this.terminalDeltaClaimed = true;
+    }
+    return {
+      ...this.terminalIdentity,
+      activeMsDelta: this.terminalDeltaConfirmed ? undefined : this.terminalDelta,
+      confirmActiveTime: () => { this.terminalDeltaConfirmed = true; },
+    };
   }
 
   private complete(completion: ReviewCompletion): ReviewCompletion {

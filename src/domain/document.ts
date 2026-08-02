@@ -24,8 +24,17 @@ export interface ReviewDocument {
   sections: DocumentSection[];
 }
 
+export interface SourceTextLines {
+  lines: string[];
+  hasFinalNewline: boolean;
+}
+
+export function splitSourceText(content: string): SourceTextLines {
+  return { lines: content.split(/\r?\n/), hasFinalNewline: content.endsWith("\n") };
+}
+
 export function parseMarkdownDocument(path: string, content: string): ReviewDocument {
-  const rawLines = content.split(/\r?\n/);
+  const rawLines = splitSourceText(content).lines;
   const sections: DocumentSection[] = [];
   const lines: DocumentLine[] = [];
   let inCode = false;
