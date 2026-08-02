@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { Review, ReviewComparison, ReviewDocument, ReviewSourceState, SelectionRange } from "@/api/types"
 import { ChangesView, changesTabLabel } from "@/components/ChangesView"
 import { RenderedMarkdown } from "@/components/RenderedMarkdown"
 import { SourceStateBanner } from "@/components/SourceState"
 import { SourceReader } from "@/components/SourceReader"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { scrollToLine } from "@/lib/scroll-to-line"
 
 interface ReaderPaneProps {
   document: ReviewDocument
@@ -12,18 +13,32 @@ interface ReaderPaneProps {
   selection: SelectionRange
   sourceState: ReviewSourceState
   comparison: ReviewComparison
+  openRequest?: { documentPath: string; line: number } | null
   onSelect: (selection: SelectionRange) => void
 }
 
 type ReaderView = "rendered" | "source" | "changes"
 
-export function ReaderPane({ document, review, selection, sourceState, comparison, onSelect }: ReaderPaneProps) {
+export function ReaderPane({ document, review, selection, sourceState, comparison, openRequest, onSelect }: ReaderPaneProps) {
   const [view, setView] = useState<ReaderView>(() => defaultView(comparison))
+  const handledOpenRequest = useRef<ReaderPaneProps["openRequest"]>(null)
   const openCount = review.annotations.filter((item) => item.status === "open").length
   const comparisonKey = comparison.state === "diff"
     ? comparison.roundId
     : comparison.state === "unavailable" ? `${comparison.state}:${comparison.reason}` : comparison.state
   useEffect(() => setView(defaultView(comparison)), [document.path, comparisonKey])
+  useEffect(() => {
+    if (openRequest == null || openRequest.documentPath !== document.path || handledOpenRequest.current === openRequest) return
+    if (view !== "rendered") {
+      setView("rendered")
+      return
+    }
+    const frame = window.requestAnimationFrame(() => {
+      scrollToLine(openRequest.line)
+      handledOpenRequest.current = openRequest
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [document.path, openRequest, view])
 
   return (
     <section className="review-scroll min-h-0 overflow-auto p-5 lg:p-7">

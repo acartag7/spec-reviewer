@@ -120,6 +120,23 @@ test("path, filename, timestamp, schema, digest, annotation, and size mismatches
   await expectCode(oversized.store.loadCommitted(oversized.documentPath, round.id), "round_store_corrupt");
 });
 
+test("duplicate stable attempt suffixes fail reads and later writes", async () => {
+  const ctx = await fresh();
+  const original = roundFor(ctx.documentPath);
+  await ctx.store.commit(original);
+  const directory = join(ctx.storageDir, "rounds", pathKey(ctx.documentPath));
+  const originalFile = join(directory, `${original.id}.json`);
+  const duplicateEpoch = 1_750_000_000_001;
+  const duplicate = JSON.parse(await readFile(originalFile, "utf8")) as Record<string, unknown>;
+  duplicate.id = `${duplicateEpoch}-${original.id.split("-")[1]}`;
+  duplicate.completedAt = new Date(duplicateEpoch).toISOString();
+  await writeFile(join(directory, `${duplicate.id}.json`), JSON.stringify(duplicate), { mode: 0o600 });
+
+  assert.deepEqual(await ctx.store.loadLatest(ctx.documentPath), { state: "unavailable", reason: "baseline-unavailable" });
+  await expectCode(ctx.store.loadCommitted(ctx.documentPath, original.id), "round_store_corrupt");
+  await expectCode(ctx.store.commit(roundFor(ctx.documentPath, duplicateEpoch + 1)), "round_store_corrupt");
+});
+
 test("round files remain exactly 0600 under a restrictive umask", async () => {
   const ctx = await fresh();
   const previous = process.umask(0o277);

@@ -11,7 +11,6 @@ import { Workspace } from "@/components/Workspace"
 import { createAnnotation, formFromAnnotation, removeAnnotation, upsertAnnotation } from "@/lib/review-utils"
 import type { AnnotationFormValue } from "@/lib/review-utils"
 import { isMarkdownFile } from "@/lib/path-utils"
-import { scrollToLine } from "@/lib/scroll-to-line"
 import { NO_SELECTION } from "@/lib/selection-utils"
 import { recoverFailedSave } from "@/lib/save-recovery"
 import { routeTerminalActiveTime, sessionOutcomeFor, type SessionOutcome } from "@/lib/terminal-active-time"
@@ -225,7 +224,6 @@ export function ReviewerPage() {
           onFormChange={updateForm}
           onFormSubmit={addOrUpdateAnnotation}
           onFormReset={() => { window.getSelection()?.removeAllRanges(); resetDraft(NO_SELECTION, initialSelection) }}
-          onOpenAnnotation={(annotation) => scrollToLine(annotation.lineStart)}
           onEditAnnotation={(annotation) => updateForm(formFromAnnotation(annotation))}
           onStatusAnnotation={setAnnotationStatus}
           onDeleteAnnotation={deleteAnnotation}

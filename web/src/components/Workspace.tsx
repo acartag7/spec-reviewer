@@ -1,3 +1,4 @@
+import { useState } from "react"
 import type { Annotation, Review, ReviewComparison, ReviewDocument, ReviewSourceState, SelectionRange } from "@/api/types"
 import { AgentExport } from "@/components/AgentExport"
 import { AnnotationList } from "@/components/AnnotationList"
@@ -19,7 +20,6 @@ interface WorkspaceProps {
   onFormChange: (form: AnnotationFormValue) => void
   onFormSubmit: () => void
   onFormReset: () => void
-  onOpenAnnotation: (annotation: Annotation) => void
   onEditAnnotation: (annotation: Annotation) => void
   onStatusAnnotation: (annotation: Annotation, status: Annotation["status"]) => void
   onDeleteAnnotation: (annotation: Annotation) => void
@@ -27,6 +27,7 @@ interface WorkspaceProps {
 }
 
 export function Workspace(props: WorkspaceProps) {
+  const [openRequest, setOpenRequest] = useState<{ documentPath: string; line: number } | null>(null)
   return (
     <main className="grid h-[calc(100dvh-3.5rem)] min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_390px]">
       <ReaderPane
@@ -35,6 +36,7 @@ export function Workspace(props: WorkspaceProps) {
         selection={props.selection}
         sourceState={props.sourceState}
         comparison={props.comparison}
+        openRequest={openRequest}
         onSelect={props.onSelection}
       />
       <aside className="review-scroll grid min-h-0 gap-5 overflow-auto border-t bg-card p-4 lg:border-l lg:border-t-0">
@@ -49,7 +51,10 @@ export function Workspace(props: WorkspaceProps) {
         <div className="border-t" />
         <AnnotationList
           annotations={props.review.annotations}
-          onOpen={props.onOpenAnnotation}
+          onOpen={(annotation) => setOpenRequest({
+            documentPath: props.document.path,
+            line: annotation.anchor?.state === "moved" ? annotation.anchor.lineStart ?? annotation.lineStart : annotation.lineStart,
+          })}
           onEdit={props.onEditAnnotation}
           onStatus={props.onStatusAnnotation}
           onDelete={props.onDeleteAnnotation}

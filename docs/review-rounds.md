@@ -88,11 +88,13 @@ source warning and truthfully name both digests. Transient anchor-resolution
 response fields are not stored. The annotation snapshot uses the same server-
 owned fields and parser as the active review.
 
-The waiting session creates one stable random ID and completion timestamp before
-its first terminal callback. A failed callback retry reuses them. If its final
-round already exists and validates with that same ID, path, and completion time,
-the prior attempt committed and Finish returns the stored result. It does not
-rebuild or compare a potentially edited live payload under the same ID.
+The waiting session creates one stable random suffix and candidate completion
+timestamp before its first terminal callback. A failed callback retry reuses
+them. Under the Finish lock, the store advances the timestamp prefix above the
+latest persisted prefix when the wall clock moved backward or produced a tie.
+Retries find that committed round by the stable suffix and return its stored ID
+and completion time. They do not rebuild or compare a potentially edited live
+payload under the same attempt identity.
 
 ## Commit protocol
 
@@ -110,6 +112,7 @@ Finish uses the existing canonical-path operation lock.
    review's saved digest remain distinct. Finish does not increment the content
    revision, but a changed metric advances `updatedAt`.
 4. Acquire an exclusive per-document Finish lock, re-check the 100-round limit,
+   advance the proposed epoch above the latest persisted epoch when necessary,
    and create the immutable round. The writer creates and syncs a private
    same-directory temporary file, then hard-links it to the final allowlisted
    name without overwrite, syncs the directory, and removes the temporary file.
@@ -283,7 +286,9 @@ history that the application will never use.
 7. A failed round prepare or active-review commit leaves the session retryable;
    the retry produces the exact expected cumulative `activeMs`, one final round,
    and no duplicated delta. Failure after final-link visibility returns the
-   stored committed result even if the live review changed before retry.
+   stored committed result even if the live review changed before retry. A
+   process restart followed by a backward clock correction still commits a
+   round newer than the latest persisted filename and selects it as the baseline.
 8. Symlinks at the storage-root leaf, `rounds`, path-key directory, temporary/final
    file, or lock fail closed. Existing real storage components are tightened
    from a broader mode to `0700` before a round write. Traversal-shaped IDs,
@@ -301,10 +306,11 @@ history that the application will never use.
 13. APG keyboard navigation, associated tabpanels, textual markers, totals,
     line-number names, gap counts, visible bidi-control labels, current-side row
     selection populating the annotation form, Clear resetting that selection,
-    and exact-item Rendered current-change markers are asserted. A changed list
-    item does not color its whole list, forged HTML provenance cannot create a
-    marker or source anchor, and removed-only rows do not create a false
-    current-source anchor.
+    opening any annotation by switching from Changes to an anchored view before
+    scrolling, and exact-item Rendered current-change markers are asserted. A
+    changed list item does not color its whole list, forged HTML provenance
+    cannot create a marker or source anchor, and removed-only rows do not create
+    a false current-source anchor.
 14. Regression tests fail when no-overwrite final-link commit, stable retry identity,
     active-time confirmation, immutable collision checking, comparison degrade,
     or red/green row classification is reverted.
@@ -313,10 +319,13 @@ history that the application will never use.
 
 This slice exceeded three adversarial review rounds because the initial contract
 named list-item and code-line markers without defining nested-list provenance or
-a non-color signal for changed code. Review therefore discovered behavior the
-contract should have enumerated. Future Rendered provenance work must specify
-flat, nested, raw-HTML, and code-line mapping before implementation; review
-verifies those cases rather than introducing them round by round.
+a non-color signal for changed code. It also omitted note navigation from a
+diff-only view and cross-process clock rollback from the round-ordering model.
+Review therefore discovered behavior the contract should have enumerated.
+Future Rendered provenance and durable-ordering work must specify flat, nested,
+raw-HTML, code-line, navigation, restart, and clock-rollback behavior before
+implementation; review verifies those cases rather than introducing them round
+by round.
 
 ## Out of scope
 

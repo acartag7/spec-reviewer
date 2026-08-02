@@ -65,6 +65,22 @@ test("an existing valid identity is idempotent and never rebuilt", async () => {
   assert.equal((await ctx.store.loadCommitted(ctx.documentPath, original.id))?.sourceText, "# Original\n");
 });
 
+test("commit advances the persisted epoch when the clock moves backward across restarts", async () => {
+  const ctx = await fresh();
+  const future = roundFor(ctx.documentPath, 1_750_000_001_000, "# Future clock\n");
+  const restarted = roundFor(ctx.documentPath, 1_750_000_000_000, "# Completed after restart\n");
+  await ctx.store.commit(future);
+
+  const committed = await ctx.store.commit(restarted);
+  assert.ok(committed);
+  assert.match(committed.id, /^1750000001001-/);
+  assert.equal(committed.completedAt, new Date(1_750_000_001_001).toISOString());
+  const latest = await ctx.store.loadLatest(ctx.documentPath);
+  assert.equal(latest.state, "ready");
+  if (latest.state === "ready") assert.equal(latest.round.sourceText, "# Completed after restart\n");
+  assert.equal((await ctx.store.loadCommitted(ctx.documentPath, restarted.id))?.id, committed.id);
+});
+
 test("a stale Finish lock fails closed with a fixed busy error", async () => {
   const ctx = await fresh();
   await ctx.store.commit(roundFor(ctx.documentPath, 1_750_000_000_000));

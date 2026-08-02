@@ -42,37 +42,34 @@ export class JsonReviewRoundStore implements ReviewRoundStore {
     if (!ROUND_ID_PATTERN.test(roundId)) throw corruptRound();
     const directory = await this.existingRoundDirectory(documentPath);
     if (directory == null) return null;
-    try {
-      return await readRound(directory, `${roundId}.json`, documentPath);
-    } catch (error) {
-      if (isErrno(error, "ENOENT")) return null;
-      throw error instanceof AppError ? error : corruptRound();
-    }
+    return readCommittedRound(directory, roundId, documentPath);
   }
 
   async commit(input: ReviewRound): Promise<ReviewRound | null> {
-    const round = parseStoredRound(input);
-    const content = `${JSON.stringify(round, null, 2)}\n`;
-    if (Buffer.byteLength(content, "utf8") > MAX_STORED_ROUND_BYTES) throw corruptRound();
-    if (this.isImmutableUpload(round.documentPath)) return null;
-    const directory = await this.ensureRoundDirectory(round.documentPath);
-    const existing = await readOptionalRound(directory, round);
+    const requested = parseStoredRound(input);
+    if (serializedRoundBytes(requested) > MAX_STORED_ROUND_BYTES) throw corruptRound();
+    if (this.isImmutableUpload(requested.documentPath)) return null;
+    const directory = await this.ensureRoundDirectory(requested.documentPath);
+    const existing = await readCommittedRound(directory, requested.id, requested.documentPath);
     if (existing != null) return existing;
     const release = await acquireFinishLock(directory);
     let committed = false;
     try {
-      const afterLock = await readOptionalRound(directory, round);
+      const names = finalRoundNames(await readdir(directory));
+      const afterLock = await readCommittedRound(directory, requested.id, requested.documentPath, names);
       if (afterLock != null) {
         committed = true;
         return afterLock;
       }
-      const names = finalRoundNames(await readdir(directory));
       if (names.length >= MAX_ROUNDS_PER_DOCUMENT) {
         throw new AppError("round_limit_reached", 409, "Review round limit reached; remove local history before retrying");
       }
+      const round = monotonicRound(requested, names);
+      const content = `${JSON.stringify(round, null, 2)}\n`;
+      if (Buffer.byteLength(content, "utf8") > MAX_STORED_ROUND_BYTES) throw corruptRound();
       const published = await publishPrivateFileNoReplace(directory, `${round.id}.json`, content);
       if (!published) {
-        const raced = await readOptionalRound(directory, round);
+        const raced = await readCommittedRound(directory, requested.id, requested.documentPath);
         if (raced != null) {
           committed = true;
           return raced;
@@ -111,7 +108,34 @@ export class JsonReviewRoundStore implements ReviewRoundStore {
 }
 
 function finalRoundNames(entries: string[]): string[] {
-  return entries.filter((entry) => ROUND_ID_PATTERN.test(entry.replace(/\.json$/, "")) && entry.endsWith(".json"));
+  const names = entries.filter((entry) => ROUND_ID_PATTERN.test(entry.replace(/\.json$/, "")) && entry.endsWith(".json"));
+  const suffixes = new Set<string>();
+  for (const name of names) {
+    const suffix = ROUND_ID_PATTERN.exec(name.replace(/\.json$/, ""))?.[2];
+    if (suffix == null || suffixes.has(suffix)) throw corruptRound();
+    suffixes.add(suffix);
+  }
+  return names;
+}
+
+function serializedRoundBytes(round: ReviewRound): number {
+  return Buffer.byteLength(`${JSON.stringify(round, null, 2)}\n`, "utf8");
+}
+
+function monotonicRound(round: ReviewRound, names: string[]): ReviewRound {
+  const requested = ROUND_ID_PATTERN.exec(round.id);
+  const latest = [...names].sort().at(-1);
+  const latestMatch = latest == null ? null : ROUND_ID_PATTERN.exec(latest.replace(/\.json$/, ""));
+  if (requested == null || (latest != null && latestMatch == null)) throw corruptRound();
+  const requestedEpoch = Number(requested[1]);
+  const latestEpoch = Number(latestMatch?.[1] ?? 0);
+  const epoch = Math.max(requestedEpoch, latestEpoch + 1);
+  if (epoch === requestedEpoch) return round;
+  return parseStoredRound({
+    ...round,
+    id: `${String(epoch).padStart(13, "0")}-${requested[2]}`,
+    completedAt: new Date(epoch).toISOString(),
+  });
 }
 
 async function assertRealDirectoryPath(path: string): Promise<void> {
@@ -121,15 +145,19 @@ async function assertRealDirectoryPath(path: string): Promise<void> {
   }
 }
 
-async function readOptionalRound(directory: string, expected: ReviewRound): Promise<ReviewRound | null> {
-  try {
-    const stored = await readRound(directory, `${expected.id}.json`, expected.documentPath);
-    if (stored.completedAt !== expected.completedAt) throw corruptRound();
-    return stored;
-  } catch (error) {
-    if (isErrno(error, "ENOENT")) return null;
-    throw error;
-  }
+async function readCommittedRound(
+  directory: string,
+  requestedId: string,
+  expectedPath: string,
+  knownNames?: string[],
+): Promise<ReviewRound | null> {
+  const match = ROUND_ID_PATTERN.exec(requestedId);
+  if (match == null) throw corruptRound();
+  const suffix = `-${match[2]}.json`;
+  const matches = (knownNames ?? finalRoundNames(await readdir(directory))).filter((name) => name.endsWith(suffix));
+  if (matches.length === 0) return null;
+  if (matches.length !== 1) throw corruptRound();
+  return readRound(directory, matches[0]!, expectedPath);
 }
 
 async function readRound(directory: string, filename: string, expectedPath: string): Promise<ReviewRound> {
