@@ -25,7 +25,7 @@ export function selectionFromWindow(
   return {
     lineStart,
     lineEnd,
-    selectedText: sourceTextForRange(lines, lineStart, lineEnd),
+    selectedText: selectedDomText(domSelection, range) || sourceTextForRange(lines, lineStart, lineEnd),
   }
 }
 
@@ -51,4 +51,24 @@ function rangeFromElement(element: Element, maxLine: number): SourceRange | null
   const end = Number(row.dataset.sourceEndLine ?? row.dataset.sourceLine)
   if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > maxLine) return null
   return { lineStart: start, lineEnd: end }
+}
+
+function selectedDomText(selection: Selection, range: Range): string {
+  const fragment = range.cloneContents()
+  const ignored = fragment.querySelectorAll("[data-selection-ignore]")
+  if (ignored.length === 0) return cleanSelection(selection.toString())
+  ignored.forEach((element) => element.remove())
+
+  const host = document.createElement("div")
+  host.setAttribute("aria-hidden", "true")
+  host.style.cssText = "position:fixed;left:-100000px;top:0;width:1000px;opacity:0;pointer-events:none"
+  host.append(fragment)
+  document.body.append(host)
+  const value = typeof host.innerText === "string" ? host.innerText : host.textContent ?? ""
+  host.remove()
+  return cleanSelection(value)
+}
+
+function cleanSelection(value: string): string {
+  return value.trim()
 }

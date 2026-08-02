@@ -2,7 +2,7 @@ import DOMPurify from "dompurify"
 import { marked } from "marked"
 import type { MarkdownBlock, SourceAnchor } from "@/lib/markdown-provenance"
 
-const forbiddenProvenanceAttributes = ["data-source-line", "data-source-end-line", "data-change"]
+const forbiddenProvenanceAttributes = ["data-source-line", "data-source-end-line", "data-change", "data-selection-ignore"]
 
 export interface RenderedBlockHtml {
   html: string
@@ -59,6 +59,7 @@ function applyChangeMarkers(root: DocumentFragment, changedLines: ReadonlySet<nu
 function changeLabel(): HTMLSpanElement {
   const label = document.createElement("span")
   label.className = "rendered-change-label"
+  label.dataset.selectionIgnore = "true"
   label.textContent = "Changed"
   return label
 }

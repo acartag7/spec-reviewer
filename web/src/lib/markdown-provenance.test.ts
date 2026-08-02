@@ -73,7 +73,7 @@ test("renderMarkdownBlockHtml sanitizes raw markdown HTML", () => {
 
 test("document HTML cannot forge provenance or shift an outer list item anchor", () => {
   const forged = [
-    '<span data-source-line="1" data-source-end-line="999" data-change="current">forged</span>',
+    '<span data-source-line="1" data-source-end-line="999" data-change="current" data-selection-ignore="true">forged</span>',
     "",
     "- real item",
     "  <ul><li data-source-line=\"1\">raw item</li></ul>",
@@ -84,7 +84,9 @@ test("document HTML cannot forge provenance or shift an outer list item anchor",
   const host = htmlHost(html)
 
   const items = Array.from(host.querySelectorAll<HTMLElement>("li"))
+  const forgedSpan = Array.from(host.querySelectorAll<HTMLElement>("span")).find((span) => span.textContent === "forged")
   expect(host.querySelector("[data-source-end-line='999']")).toBeNull()
+  expect(forgedSpan).not.toHaveAttribute("data-selection-ignore")
   expect(items[0]).toHaveAttribute("data-change", "current")
   expect(items[0]?.querySelector(".rendered-change-label")).toHaveTextContent("Changed")
   expect(items[1]).not.toHaveAttribute("data-source-line")

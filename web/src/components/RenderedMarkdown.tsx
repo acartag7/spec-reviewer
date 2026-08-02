@@ -84,7 +84,7 @@ export function RenderedMarkdown({ document, review, comparison, selection, onSe
             >
               <MessageSquarePlus className="size-4" />
             </button>
-            {changed && <span className="rendered-change-label">Changed</span>}
+            {changed && <span className="rendered-change-label" data-selection-ignore="true">Changed</span>}
             {block.rendered.artifact == null ? (
               <div dangerouslySetInnerHTML={{ __html: block.rendered.html }} />
             ) : (

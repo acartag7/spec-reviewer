@@ -111,7 +111,7 @@
   padding-left: 0.65rem;
 }
 
-.markdown-block .rendered-change-label {
+.markdown-block .rendered-change-label[data-selection-ignore="true"] {
   color: var(--ok);
   display: inline-block;
   font-family: var(--font-mono);

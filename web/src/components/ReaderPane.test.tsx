@@ -44,7 +44,7 @@ test("renders markdown by default and keeps source-line click anchors", () => {
   })
 })
 
-test("Rendered marks exact changed items without leaking its label into source evidence", () => {
+test("Rendered marks exact changed items without leaking its label into selected text", () => {
   const onSelect = vi.fn()
   const { rerender } = render(
     <ReaderPane
@@ -81,7 +81,7 @@ test("Rendered marks exact changed items without leaking its label into source e
   window.getSelection()?.removeAllRanges()
   window.getSelection()?.addRange(range)
   fireEvent.mouseUp(changedItem!.closest(".markdown-body")!)
-  expect(onSelect).toHaveBeenLastCalledWith({ lineStart: 3, lineEnd: 3, selectedText: "- Open local file." })
+  expect(onSelect).toHaveBeenLastCalledWith({ lineStart: 3, lineEnd: 3, selectedText: "Open local file." })
   window.getSelection()?.removeAllRanges()
   rerender(
     <ReaderPane

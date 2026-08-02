@@ -161,10 +161,30 @@ function formatCompletedAt(value: string): string {
 function visibleDiffText(value: string): string {
   return Array.from(value, (character) => {
     const codePoint = character.codePointAt(0)
-    if (codePoint != null && codePoint >= 0x20 && codePoint <= 0x7e) return character
+    if (codePoint == null || !isObscuringControl(codePoint)) return character
     const point = codePoint?.toString(16).toUpperCase().padStart(4, "0") ?? "????"
     return `[U+${point}]`
   }).join("")
+}
+
+function isObscuringControl(codePoint: number): boolean {
+  return codePoint <= 0x08
+    || codePoint === 0x0b
+    || codePoint === 0x0c
+    || codePoint === 0x0d
+    || (codePoint >= 0x0e && codePoint <= 0x1f)
+    || (codePoint >= 0x7f && codePoint <= 0x9f)
+    || codePoint === 0xad
+    || codePoint === 0x61c
+    || codePoint === 0x180e
+    || codePoint === 0x200b
+    || codePoint === 0x200e
+    || codePoint === 0x200f
+    || (codePoint >= 0x2028 && codePoint <= 0x202e)
+    || (codePoint >= 0x2060 && codePoint <= 0x2064)
+    || (codePoint >= 0x2066 && codePoint <= 0x206f)
+    || codePoint === 0xfeff
+    || (codePoint >= 0xe0000 && codePoint <= 0xe007f)
 }
 
 function exactSourceSelection(selection: SelectionRange, lines: ReviewDocument["lines"]): SelectionRange {

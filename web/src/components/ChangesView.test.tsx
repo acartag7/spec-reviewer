@@ -13,7 +13,7 @@ const comparison: ReviewComparison = {
   added: 1,
   removed: 1,
   rows: [
-    { kind: "remove", oldLine: 2, newLine: null, text: "old\u202Etext\r\u2028\u{E007F}é" },
+    { kind: "remove", oldLine: 2, newLine: null, text: "old\u202Etext\r\u2028\u{E007F}é 漢字 👩‍💻" },
     { kind: "add", oldLine: null, newLine: 2, text: "<img src=x onerror=alert(1)>" },
     { kind: "gap", hiddenOld: 8, hiddenNew: 9 },
     { kind: "no-newline", oldLine: null, newLine: null, text: "No newline at end of file" },
@@ -25,7 +25,7 @@ test("Changes renders textual change evidence, safe text, gap counts, and visibl
   expect(screen.getByRole("region", { name: "Changes: 1 added, 1 removed" })).toBeInTheDocument()
   expect(screen.getByRole("row", { name: "Removed, minus marker, old line 2" })).toHaveTextContent("−")
   expect(screen.getByRole("row", { name: "Added, plus marker, new line 2" })).toHaveTextContent("+")
-  expect(screen.getByText("old[U+202E]text[U+000D][U+2028][U+E007F][U+00E9]")).toBeInTheDocument()
+  expect(screen.getByText("old[U+202E]text[U+000D][U+2028][U+E007F]é 漢字 👩‍💻")).toBeInTheDocument()
   expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeInTheDocument()
   expect(document.querySelector("img")).toBeNull()
   expect(screen.getByLabelText("Collapsed gap: 8 old lines and 9 new lines hidden")).toBeInTheDocument()
@@ -44,7 +44,7 @@ test("selecting a current-side diff row populates exact current source evidence"
     selectedText: "<img src=x onerror=alert(1)>",
   })
   onSelect.mockClear()
-  fireEvent.click(screen.getByText("old[U+202E]text[U+000D][U+2028][U+E007F][U+00E9]"))
+  fireEvent.click(screen.getByText("old[U+202E]text[U+000D][U+2028][U+E007F]é 漢字 👩‍💻"))
   expect(onSelect).not.toHaveBeenCalled()
 
   const range = document.createRange()
