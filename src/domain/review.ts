@@ -1,10 +1,13 @@
 import { createAnnotationId } from "./ids.ts";
-import type { ReviewDocument } from "./document.ts";
+import { invalidReview } from "./errors.ts";
+import { normalizeMetrics, type ReviewMetrics } from "./review-metrics.ts";
+export { MAX_ACTIVE_MS, normalizeActiveMsDelta, normalizeMetrics } from "./review-metrics.ts";
+export { sourceTextForLines, withResolvedAnchors } from "./anchor-resolver.ts";
 
 export type AnnotationKind = "issue" | "question" | "suggestion" | "decision" | "note";
 export type AnnotationSeverity = "blocker" | "major" | "minor" | "note";
 export type AnnotationStatus = "open" | "resolved";
-export type AnnotationAnchorState = "ok" | "moved" | "not-found";
+export type AnnotationAnchorState = "ok" | "moved" | "ambiguous" | "not-found";
 
 export interface AnnotationAnchor {
   state: AnnotationAnchorState;
@@ -31,13 +34,10 @@ export interface Annotation {
   anchor?: AnnotationAnchor | null;
 }
 
-export interface ReviewMetrics {
-  activeMs: number;
-}
-
 export interface Review {
   documentPath: string;
   documentDigest: string;
+  revision: number;
   summary: string;
   annotations: Annotation[];
   createdAt: string;
@@ -47,6 +47,7 @@ export interface Review {
 
 export interface ReviewDraft {
   path: string;
+  baseRevision?: unknown;
   summary?: unknown;
   annotations?: unknown;
   activeMsDelta?: unknown;
@@ -56,31 +57,15 @@ const kinds = new Set<AnnotationKind>(["issue", "question", "suggestion", "decis
 const severities = new Set<AnnotationSeverity>(["blocker", "major", "minor", "note"]);
 const statuses = new Set<AnnotationStatus>(["open", "resolved"]);
 
-// One year of milliseconds. A single session cannot approach this; anything larger is
-// garbage or an overflow, so we clamp rather than persist it. Bounds concurrent-tab over-counting too.
-export const MAX_ACTIVE_MS = 1000 * 60 * 60 * 24 * 366;
+export const MAX_ANNOTATIONS = 200;
+export const MAX_ANNOTATION_SPAN = 500;
+export const MAX_TOTAL_ANNOTATION_SPAN = 20_000;
+export const MAX_TEXT_BYTES = 64 * 1024;
+export const MAX_ANNOTATION_ID_BYTES = 128;
 
 export function createEmptyReview(path: string, digest: string): Review {
   const now = new Date().toISOString();
-  return { documentPath: path, documentDigest: digest, summary: "", annotations: [], createdAt: now, updatedAt: now, metrics: { activeMs: 0 } };
-}
-
-// Client-derived telemetry. Coerce, never throw: a bad value must not block a save (which
-// would lose the user's annotations) and must never overwrite the stored running total.
-export function normalizeActiveMsDelta(value: unknown): number {
-  if (value == null) return 0;
-  if (typeof value === "string" && value.trim() === "") return 0;
-  const n = typeof value === "string" ? Number(value) : value;
-  if (typeof n !== "number" || !Number.isFinite(n)) return 0;
-  if (n < 0) return 0;
-  if (n > MAX_ACTIVE_MS) return MAX_ACTIVE_MS;
-  return Math.floor(n);
-}
-
-export function normalizeMetrics(previous: ReviewMetrics | undefined, delta: unknown): ReviewMetrics {
-  const base = previous?.activeMs ?? 0;
-  const total = base + normalizeActiveMsDelta(delta);
-  return { activeMs: total > MAX_ACTIVE_MS ? MAX_ACTIVE_MS : total };
+  return { documentPath: path, documentDigest: digest, revision: 0, summary: "", annotations: [], createdAt: now, updatedAt: now, metrics: { activeMs: 0 } };
 }
 
 export function normalizeReviewDraft(
@@ -90,16 +75,43 @@ export function normalizeReviewDraft(
   anchorTextLookup: (annotation: Pick<Annotation, "id" | "lineStart" | "lineEnd">) => string | null = () => null,
   previous: Review | null = null,
 ): Review {
+  if (draft.summary !== undefined && typeof draft.summary !== "string") {
+    throw invalidReview("summary must be a string");
+  }
+  if (typeof draft.summary === "string" && draft.summary !== previous?.summary) {
+    assertByteLength(draft.summary, MAX_TEXT_BYTES, "summary");
+  }
+  if (draft.annotations !== undefined && !Array.isArray(draft.annotations)) {
+    throw invalidReview("annotations must be an array");
+  }
+  if (Array.isArray(draft.annotations)
+    && draft.annotations.length > MAX_ANNOTATIONS
+    && !isLegacyAnnotationReduction(draft.annotations, previous)) {
+    if ((previous?.annotations.length ?? 0) > MAX_ANNOTATIONS) {
+      throw invalidReview(`legacy review exceeds ${MAX_ANNOTATIONS} annotations; delete annotations before editing other fields`);
+    }
+    throw invalidReview(`annotations must contain at most ${MAX_ANNOTATIONS} items`);
+  }
   const now = new Date().toISOString();
+  const previousById = new Map(previous?.annotations.map((annotation) => [annotation.id, annotation]) ?? []);
+  const seenIds = new Set<string>();
   const annotations = Array.isArray(draft.annotations)
-    ? draft.annotations.map((item) => normalizeAnnotation(item, now, sectionLookup, anchorTextLookup))
-    : [];
+    ? draft.annotations.map((item) => normalizeAnnotation(
+      item,
+      now,
+      sectionLookup,
+      anchorTextLookup,
+      previousById,
+      seenIds,
+    ))
+    : previous?.annotations ?? [];
   return {
     documentPath: draft.path,
     documentDigest: digest,
-    summary: typeof draft.summary === "string" ? draft.summary : "",
+    revision: previous?.revision ?? 0,
+    summary: typeof draft.summary === "string" ? draft.summary : previous?.summary ?? "",
     annotations,
-    createdAt: now,
+    createdAt: previous?.createdAt ?? now,
     updatedAt: now,
     metrics: normalizeMetrics(previous?.metrics, draft.activeMsDelta),
   };
@@ -110,115 +122,84 @@ function normalizeAnnotation(
   now: string,
   sectionLookup: (line: number) => string | null,
   anchorTextLookup: (annotation: Pick<Annotation, "id" | "lineStart" | "lineEnd">) => string | null,
+  previousById: Map<string, Annotation>,
+  seenIds: Set<string>,
 ): Annotation {
   if (input == null || typeof input !== "object" || Array.isArray(input)) {
-    throw new Error("annotation must be an object");
+    throw invalidReview("annotation must be an object");
   }
   const record = input as Record<string, unknown>;
   const lineStart = positiveInteger(record.lineStart, "lineStart");
   const lineEnd = positiveInteger(record.lineEnd ?? record.lineStart, "lineEnd");
-  if (lineEnd < lineStart) throw new Error("lineEnd must be greater than or equal to lineStart");
+  if (lineEnd < lineStart) throw invalidReview("lineEnd must be greater than or equal to lineStart");
   const kind = enumValue(record.kind, kinds, "kind", "note");
   const severity = enumValue(record.severity, severities, "severity", "note");
   const status = enumValue(record.status, statuses, "status", "open");
-  const createdAt = typeof record.createdAt === "string" ? record.createdAt : now;
-  const id = typeof record.id === "string" && record.id.trim() !== "" ? record.id : createAnnotationId();
-  const anchorText = anchorTextLookup({ id, lineStart, lineEnd })
-    ?? optionalString(record.anchorText)
-    ?? anchorSourceText(record.anchor)
-    ?? null;
+  if (record.id !== undefined && typeof record.id !== "string") throw invalidReview("annotation id must be a string");
+  const id = typeof record.id === "string" && record.id.trim() !== "" ? record.id.trim() : createAnnotationId();
+  if (seenIds.has(id)) throw invalidReview("annotation ids must be unique");
+  seenIds.add(id);
+  const previous = previousById.get(id);
+  if (previous == null) assertByteLength(id, MAX_ANNOTATION_ID_BYTES, "annotation id");
+  const sameRange = previous?.lineStart === lineStart && previous.lineEnd === lineEnd;
+  const anchorText = anchorTextLookup({ id, lineStart, lineEnd });
+  const note = requiredString(record.note, "note");
+  if (note !== previous?.note) assertByteLength(note, MAX_TEXT_BYTES, "note");
+  if (record.agentAction !== undefined && typeof record.agentAction !== "string") {
+    throw invalidReview("agentAction must be a string");
+  }
+  const agentAction = typeof record.agentAction === "string" ? record.agentAction : "";
+  if (agentAction !== previous?.agentAction) assertByteLength(agentAction, MAX_TEXT_BYTES, "agentAction");
   return {
     id,
     lineStart,
     lineEnd,
-    section: typeof record.section === "string" ? record.section : sectionLookup(lineStart),
-    selectedText: optionalString(record.selectedText),
+    section: sameRange ? previous.section : sectionLookup(lineStart),
+    selectedText: anchorText ?? (sameRange ? previous.selectedText : null),
     kind,
     severity,
     status,
-    note: requiredString(record.note, "note"),
-    agentAction: typeof record.agentAction === "string" ? record.agentAction : "",
-    createdAt,
+    note,
+    agentAction,
+    createdAt: previous?.createdAt ?? now,
     updatedAt: now,
     anchorText,
   };
 }
 
-export function withResolvedAnchors(document: ReviewDocument, review: Review): Review {
-  return {
-    ...review,
-    annotations: review.annotations.map((annotation) => {
-      const anchor = resolveAnchor(document, annotation);
-      return { ...annotation, anchor, anchorState: anchor?.state };
-    }),
-  };
-}
-
-export function sourceTextForLines(document: ReviewDocument, start: number, end: number): string | null {
-  const lines = document.lines.filter((line) => line.number >= start && line.number <= end);
-  if (lines.length !== end - start + 1) return null;
-  const text = lines.map((line) => line.text).join("\n");
-  return text.trim() === "" ? null : text;
+function isLegacyAnnotationReduction(value: unknown[], previous: Review | null): boolean {
+  if (previous == null || previous.annotations.length <= MAX_ANNOTATIONS || value.length >= previous.annotations.length) {
+    return false;
+  }
+  const previousById = new Map(previous.annotations.map((annotation) => [annotation.id, annotation]));
+  return value.every((item) => {
+    if (item == null || typeof item !== "object" || Array.isArray(item)) return false;
+    const record = item as Record<string, unknown>;
+    const id = typeof record.id === "string" ? record.id.trim() : "";
+    const stored = previousById.get(id);
+    const lineEnd = record.lineEnd == null ? record.lineStart : record.lineEnd;
+    return stored != null && record.lineStart === stored.lineStart && lineEnd === stored.lineEnd;
+  });
 }
 
 function enumValue<T extends string>(value: unknown, allowed: Set<T>, field: string, fallback: T): T {
   if (value == null || value === "") return fallback;
   if (typeof value === "string" && allowed.has(value as T)) return value as T;
-  throw new Error(`${field} is invalid`);
+  throw invalidReview(`${field} is invalid`);
 }
 
 function positiveInteger(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
-    throw new Error(`${field} must be a positive integer`);
+    throw invalidReview(`${field} must be a positive integer`);
   }
   return value;
 }
 
 function requiredString(value: unknown, field: string): string {
-  if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} is required`);
+  if (typeof value !== "string" || value.trim() === "") throw invalidReview(`${field} is required`);
   return value.trim();
 }
 
-function optionalString(value: unknown): string | null {
-  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
-}
-
-function anchorSourceText(input: unknown): string | null {
-  if (input == null || typeof input !== "object" || Array.isArray(input)) return null;
-  const record = input as Record<string, unknown>;
-  return optionalString(record.sourceText);
-}
-
-function resolveAnchor(document: ReviewDocument, annotation: Annotation): AnnotationAnchor | null {
-  if (annotation.anchorText == null || annotation.anchorText.trim() === "") return null;
-  const current = sourceTextForLines(document, annotation.lineStart, annotation.lineEnd);
-  if (sameSource(current, annotation.anchorText)) {
-    return {
-      state: "ok",
-      lineStart: annotation.lineStart,
-      lineEnd: annotation.lineEnd,
-      sourceText: annotation.anchorText,
-    };
-  }
-  const moved = findAnchor(document, annotation.anchorText);
-  if (moved != null) return { ...moved, state: "moved", sourceText: annotation.anchorText };
-  return { state: "not-found", lineStart: null, lineEnd: null, sourceText: annotation.anchorText };
-}
-
-function findAnchor(document: ReviewDocument, anchorText: string): Pick<AnnotationAnchor, "lineStart" | "lineEnd"> | null {
-  const lineCount = anchorText.split(/\r?\n/).length;
-  const maxStart = document.lines.length - lineCount + 1;
-  for (let start = 1; start <= maxStart; start += 1) {
-    const end = start + lineCount - 1;
-    if (sameSource(sourceTextForLines(document, start, end), anchorText)) return { lineStart: start, lineEnd: end };
-  }
-  return null;
-}
-
-function sameSource(left: string | null, right: string): boolean {
-  return compactText(left ?? "") === compactText(right);
-}
-
-function compactText(value: string): string {
-  return value.replace(/\r\n/g, "\n").trim();
+function assertByteLength(value: string, limit: number, field: string): void {
+  if (Buffer.byteLength(value, "utf8") > limit) throw invalidReview(`${field} is too large`);
 }

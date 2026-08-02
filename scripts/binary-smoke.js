@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createServer } from "node:net";
@@ -18,6 +18,7 @@ try {
   await smokeServer();
   await smokeWaitWorkflow();
   await smokeSessions();
+  await smokeCorruptSessions();
   await smokeSkillInstaller();
   console.log("Binary smoke passed");
 } finally {
@@ -71,11 +72,22 @@ async function smokeWaitWorkflow() {
   const output = collectOutput(child);
   const base = `http://127.0.0.1:${port}`;
   await waitForHealth(base);
+  const other = writeFixture("other.md");
+  const wrongPath = await fetch(`${base}/api/session/finish`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path: other, activeMsDelta: 1000 }),
+  });
+  const wrongBody = await wrongPath.json();
+  if (wrongPath.status !== 400 || wrongBody.error?.code !== "session_path_mismatch") {
+    throw new Error("Wait workflow accepted a different document path");
+  }
   await jsonFetch(`${base}/api/review`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       path: doc,
+      baseRevision: 0,
       annotations: [{ lineStart: 3, lineEnd: 3, kind: "issue", severity: "major", note: "Fix smoke note" }],
     }),
   });
@@ -89,6 +101,21 @@ async function smokeWaitWorkflow() {
   const completion = JSON.parse(output.stdout.trim());
   if (completion.status !== "finished" || !completion.markdown.includes("Fix smoke note")) {
     throw new Error("Wait workflow did not print finished feedback JSON");
+  }
+}
+
+async function smokeCorruptSessions() {
+  const storage = join(temp, "corrupt-store");
+  const reviews = join(storage, "reviews");
+  mkdirSync(reviews, { recursive: true });
+  writeFileSync(join(reviews, `${"0".repeat(32)}.json`), "{ malformed", "utf8");
+  const result = spawnSync(binary, ["sessions", "--json", "--storage-dir", storage], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (result.status === 0) throw new Error("sessions accepted corrupt review storage");
+  if (!result.stderr.includes("Stored review is malformed") || result.stderr.includes("Unexpected token")) {
+    throw new Error("sessions did not report a fixed corruption error");
   }
 }
 

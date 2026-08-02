@@ -119,15 +119,15 @@ is reopened, the UI shows whether the saved notes are:
 - `unreviewed`: no saved notes exist yet.
 
 Each annotation also stores a source-text snapshot. If the file changes, Spec
-Reviewer marks notes as `ok`, `moved`, or `not-found` and warns in the export
+Reviewer marks notes as `ok`, `moved`, `ambiguous`, or `not-found` and warns in the export
 instead of silently relocating edits.
 
-On a later pass over a changed file, notes saved against an older digest whose
-source text has disappeared (`not-found`) are treated as **carried over**: the
-agent export groups them separately instead of listing them as open action items,
-because the edit that removed the text most likely already addressed them.
-Relocated (`moved`) notes are still flagged so relocations are never silently
-applied.
+An unresolved note remains visible and stays in the agent export until the human
+resolves or deletes it. Missing source text is not treated as proof that the
+requested change was made. Relocated (`moved`), duplicate (`ambiguous`), and
+missing (`not-found`) notes are flagged for manual checking.
+Open and resolved notes are listed separately, with direct Resolve and Reopen
+actions. Editing a note preserves its lifecycle status and agent action.
 
 ## Security Model
 
@@ -145,6 +145,8 @@ pnpm run check
 pnpm run build:binary
 pnpm run binary:smoke
 ```
+
+`pnpm run check` type-checks both the web application and the server test suite.
 
 ## Release
 

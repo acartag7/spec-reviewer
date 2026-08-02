@@ -58,6 +58,7 @@ const documentFixture: ReviewDocument = {
 const reviewFixture: Review = {
   documentPath: "/tmp/spec.md",
   documentDigest: "digest",
+  revision: 0,
   summary: "",
   annotations: [],
   createdAt: "2026-01-01T00:00:00.000Z",

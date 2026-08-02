@@ -73,7 +73,8 @@ Spec Reviewer can read files the local user asks it to review. That is the main 
 - A path passed on the command line is opened by the local server.
 - Dropped documents are copied into the Spec Reviewer storage directory.
 - Review data and copied documents are local files, not encrypted secrets.
-- File permissions are inherited from the local OS user and filesystem.
+- Review and copied-document subdirectories are set to `0700`; stored files are
+  replaced through private `0600` temporary files and atomic rename.
 
 Do not review sensitive files from a directory where other local users or processes can read the resulting storage directory.
 
@@ -89,6 +90,10 @@ Default subdirectories:
 - `~/.spec-reviewer/documents` for dropped documents
 
 The storage root can be changed with `--storage-dir` or `SPEC_REVIEWER_STORAGE_DIR`.
+Stored review JSON is shape-validated on every read. A malformed record fails the
+operation instead of being skipped. Multiple Spec Reviewer processes sharing one
+storage directory are unsupported; atomic files prevent torn data, not
+cross-process lost updates.
 
 ## Known Limits
 

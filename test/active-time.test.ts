@@ -51,6 +51,7 @@ test("normalizeReviewDraft: metrics survive a re-save with no activeMsDelta (T2)
     annotations: [],
     createdAt: "2024-01-01T00:00:00.000Z",
     updatedAt: "2024-01-01T00:00:00.000Z",
+    revision: 0,
     metrics: { activeMs: 9000 },
   };
   const rebuilt = normalizeReviewDraft({ path: "/tmp/x.md" }, "d", () => null, () => null, previous);
@@ -103,6 +104,7 @@ async function setup(wait: boolean): Promise<Setup> {
     storageDir: join(dir, "store"),
     defaultDocumentPath: docPath,
     sessionId: null,
+    skillArgs: [],
     command: "review",
     waitForReview: wait,
     jsonOutput: false,
@@ -135,8 +137,8 @@ test("accumulated active time persists to disk with 0o600 mode (T1/T1b)", async 
   const ctx = await setup(false);
   t.after(() => ctx.server.close());
   const note = { lineStart: 1, lineEnd: 1, kind: "note" as const, severity: "note" as const, note: "x" };
-  await json(`${ctx.base}/api/review`, post({ path: ctx.docPath, activeMsDelta: 5000, annotations: [note] }));
-  await json(`${ctx.base}/api/review`, post({ path: ctx.docPath, activeMsDelta: 7000, annotations: [note] }));
+  await json(`${ctx.base}/api/review`, post({ path: ctx.docPath, baseRevision: 0, activeMsDelta: 5000, annotations: [note] }));
+  await json(`${ctx.base}/api/review`, post({ path: ctx.docPath, baseRevision: 1, activeMsDelta: 7000, annotations: [note] }));
   const doc = await json(`${ctx.base}/api/document?path=${encodeURIComponent(ctx.docPath)}`);
   assert.equal(doc.review.metrics.activeMs, 12000);
   const raw = JSON.parse(await readFile(reviewFile(ctx), "utf8"));
@@ -145,20 +147,20 @@ test("accumulated active time persists to disk with 0o600 mode (T1/T1b)", async 
   assert.equal(st.mode & 0o777, 0o600);
 });
 
-test("a malformed body does not corrupt the stored review (T4)", async (t) => {
+test("a rejected content save preserves content but still records its active-time delta (T4)", async (t) => {
   const ctx = await setup(false);
   t.after(() => ctx.server.close());
-  await json(`${ctx.base}/api/review`, post({ path: ctx.docPath, activeMsDelta: 3000, annotations: [{ lineStart: 1, lineEnd: 1, kind: "note", severity: "note", note: "keep" }] }));
-  await assert.rejects(json(`${ctx.base}/api/review`, post({ path: ctx.docPath, activeMsDelta: 9999, annotations: [{ lineStart: "nope" }] })));
+  await json(`${ctx.base}/api/review`, post({ path: ctx.docPath, baseRevision: 0, activeMsDelta: 3000, annotations: [{ lineStart: 1, lineEnd: 1, kind: "note", severity: "note", note: "keep" }] }));
+  await assert.rejects(json(`${ctx.base}/api/review`, post({ path: ctx.docPath, baseRevision: 1, activeMsDelta: 9999, annotations: [{ lineStart: "nope" }] })));
   const doc = await json(`${ctx.base}/api/document?path=${encodeURIComponent(ctx.docPath)}`);
-  assert.equal(doc.review.metrics.activeMs, 3000);
+  assert.equal(doc.review.metrics.activeMs, 12999);
   assert.equal(doc.review.annotations[0].note, "keep");
 });
 
 test("finish persists the final delta and echoes the total; second finish is idempotent (T5)", async (t) => {
   const ctx = await setup(true);
   t.after(() => ctx.server.close());
-  await json(`${ctx.base}/api/review`, post({ path: ctx.docPath, activeMsDelta: 4000, annotations: [{ lineStart: 1, lineEnd: 1, kind: "note", severity: "note", note: "x" }] }));
+  await json(`${ctx.base}/api/review`, post({ path: ctx.docPath, baseRevision: 0, activeMsDelta: 4000, annotations: [{ lineStart: 1, lineEnd: 1, kind: "note", severity: "note", note: "x" }] }));
   const finish1 = await json(`${ctx.base}/api/session/finish`, post({ path: ctx.docPath, activeMsDelta: 2000 }));
   assert.equal(finish1.status, "finished");
   assert.equal(finish1.activeMs, 6000);
@@ -171,7 +173,7 @@ test("finish persists the final delta and echoes the total; second finish is ide
 test("cancel persists the active-time delta (T6)", async (t) => {
   const ctx = await setup(true);
   t.after(() => ctx.server.close());
-  await json(`${ctx.base}/api/review`, post({ path: ctx.docPath, activeMsDelta: 3000, annotations: [{ lineStart: 1, lineEnd: 1, kind: "note", severity: "note", note: "x" }] }));
+  await json(`${ctx.base}/api/review`, post({ path: ctx.docPath, baseRevision: 0, activeMsDelta: 3000, annotations: [{ lineStart: 1, lineEnd: 1, kind: "note", severity: "note", note: "x" }] }));
   await json(`${ctx.base}/api/session/cancel`, post({ path: ctx.docPath, activeMsDelta: 1500 }));
   assert.equal(JSON.parse(await readFile(reviewFile(ctx), "utf8")).metrics.activeMs, 4500);
 });
@@ -179,7 +181,7 @@ test("cancel persists the active-time delta (T6)", async (t) => {
 test("the passive flush endpoint accumulates a delta without wiping annotations", async (t) => {
   const ctx = await setup(false);
   t.after(() => ctx.server.close());
-  await json(`${ctx.base}/api/review`, post({ path: ctx.docPath, activeMsDelta: 3000, annotations: [{ lineStart: 1, lineEnd: 1, kind: "note", severity: "note", note: "keep" }] }));
+  await json(`${ctx.base}/api/review`, post({ path: ctx.docPath, baseRevision: 0, activeMsDelta: 3000, annotations: [{ lineStart: 1, lineEnd: 1, kind: "note", severity: "note", note: "keep" }] }));
   await json(`${ctx.base}/api/active-time`, post({ path: ctx.docPath, activeMsDelta: 2500 }));
   const doc = await json(`${ctx.base}/api/document?path=${encodeURIComponent(ctx.docPath)}`);
   assert.equal(doc.review.metrics.activeMs, 5500);
@@ -194,6 +196,6 @@ test("an old store file without metrics loads as zero and upgrades on save (T7)"
   await writeFile(reviewFile(ctx), JSON.stringify({ documentPath: ctx.docPath, documentDigest: opened.document.digest, summary: "", annotations: [], createdAt: "2024-01-01T00:00:00.000Z", updatedAt: "2024-01-01T00:00:00.000Z" }));
   const doc = await json(`${ctx.base}/api/document?path=${encodeURIComponent(ctx.docPath)}`);
   assert.equal(doc.review.metrics.activeMs, 0);
-  await json(`${ctx.base}/api/review`, post({ path: ctx.docPath, activeMsDelta: 3000, annotations: [] }));
+  await json(`${ctx.base}/api/review`, post({ path: ctx.docPath, baseRevision: 0, activeMsDelta: 3000, annotations: [] }));
   assert.equal(JSON.parse(await readFile(reviewFile(ctx), "utf8")).metrics.activeMs, 3000);
 });

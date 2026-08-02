@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import type { AnnotationKind, AnnotationSeverity, SelectionRange } from "@/api/types"
-import { emptyForm, kinds, severities, type AnnotationFormValue } from "@/lib/review-utils"
+import type { AnnotationKind, AnnotationSeverity, AnnotationStatus, SelectionRange } from "@/api/types"
+import { kinds, severities, statuses, type AnnotationFormValue } from "@/lib/review-utils"
 import { cn } from "@/lib/utils"
 
 interface AnnotationPanelProps {
@@ -38,6 +38,7 @@ export function AnnotationPanel({
           <Label className="grid gap-1 text-xs text-muted-foreground">
             Lines
             <Input
+              name="lineStart"
               type="number"
               min={1}
               value={form.lineStart}
@@ -47,6 +48,7 @@ export function AnnotationPanel({
           <Label className="grid gap-1 text-xs text-muted-foreground">
             To
             <Input
+              name="lineEnd"
               type="number"
               min={1}
               value={form.lineEnd}
@@ -66,22 +68,39 @@ export function AnnotationPanel({
           options={kinds}
           onChange={(kind) => onChange({ ...form, kind })}
         />
+        <SegmentedField
+          label="Status"
+          value={form.status}
+          options={statuses}
+          onChange={(status) => onChange({ ...form, status })}
+        />
         <Label className="grid gap-1 text-xs text-muted-foreground">
-          Selected text
+          Selected source text
           <Textarea
+            name="selectedText"
             rows={2}
             value={form.selectedText}
+            readOnly
             className="max-h-44 min-h-16 font-mono text-xs"
-            onChange={(event) => onChange({ ...form, selectedText: event.currentTarget.value })}
           />
         </Label>
         <Label className="grid gap-1 text-xs text-muted-foreground">
           Feedback
           <Textarea
+            name="note"
             rows={5}
             required
             value={form.note}
             onChange={(event) => onChange({ ...form, note: event.currentTarget.value })}
+          />
+        </Label>
+        <Label className="grid gap-1 text-xs text-muted-foreground">
+          Agent action
+          <Textarea
+            name="agentAction"
+            rows={3}
+            value={form.agentAction}
+            onChange={(event) => onChange({ ...form, agentAction: event.currentTarget.value })}
           />
         </Label>
         <div className="flex justify-end gap-2">
@@ -94,13 +113,13 @@ export function AnnotationPanel({
             {form.id ? "Update note" : "Add note"}
           </Button>
         </div>
-        <input type="hidden" value={selection.lineStart} readOnly />
+        <input name="selectionLineStart" type="hidden" value={selection.lineStart} readOnly />
       </form>
     </section>
   )
 }
 
-function SegmentedField<T extends AnnotationSeverity | AnnotationKind>({
+function SegmentedField<T extends AnnotationSeverity | AnnotationKind | AnnotationStatus>({
   label,
   value,
   options,
@@ -138,8 +157,4 @@ function SegmentedField<T extends AnnotationSeverity | AnnotationKind>({
 function positiveInput(value: string): number {
   const next = Number(value)
   return Number.isInteger(next) && next > 0 ? next : 1
-}
-
-export function resetForm(selection: SelectionRange): AnnotationFormValue {
-  return emptyForm(selection)
 }

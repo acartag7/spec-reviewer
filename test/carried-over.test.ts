@@ -10,12 +10,9 @@ import { JsonReviewStore } from "../src/infrastructure/json-review-store.ts";
 import { createHttpServer } from "../src/interfaces/http/http-server.ts";
 import type { AppConfig } from "../src/config.ts";
 
-// Repro for "stale annotations resurface on iterative review passes".
-// Pass 1 saves notes anchored to the original file; the file is then edited so
-// most anchors disappear. Pass 2 must NOT re-export those gone notes as live
-// "Required Changes" — they belong in a separate "Carried Over" group, and the
-// agent-handoff completion must report the split via openAnnotations/carriedOver.
-test("stale prior-pass annotations are carried over, not re-exported as live action items", async (t) => {
+// Regression: file edits must never hide unresolved reviewer feedback. A missing
+// anchor changes the warning attached to an item, not whether that item is live.
+test("stale unresolved annotations stay visible and actionable", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "spec-reviewer-"));
   const docPath = join(dir, "README.md");
   await writeFile(docPath, "# Demo\n\nKeep this line\nTarget line one\nTarget line two\n", "utf8");
@@ -25,6 +22,7 @@ test("stale prior-pass annotations are carried over, not re-exported as live act
     storageDir: join(dir, "store"),
     defaultDocumentPath: docPath,
     sessionId: null,
+    skillArgs: [],
     command: "review",
     waitForReview: true,
     jsonOutput: false,
@@ -37,14 +35,14 @@ test("stale prior-pass annotations are carried over, not re-exported as live act
   t.after(() => server.close());
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
-  assert.notEqual(address, null);
-  assert.notEqual(typeof address, "string");
+  if (address == null || typeof address === "string") throw new Error("HTTP server has no TCP port");
   const base = `http://127.0.0.1:${address.port}`;
 
   await json(`${base}/api/review`, {
     method: "POST",
     body: JSON.stringify({
       path: docPath,
+      baseRevision: 0,
       annotations: [
         { lineStart: 3, lineEnd: 3, kind: "issue", severity: "major", note: "Live note" },
         { lineStart: 4, lineEnd: 4, kind: "issue", severity: "major", note: "Gone note one" },
@@ -61,14 +59,14 @@ test("stale prior-pass annotations are carried over, not re-exported as live act
   await writeFile(docPath, "# Demo\n\nKeep this line\nRewritten section\n", "utf8");
 
   const after = await json(`${base}/api/export?path=${encodeURIComponent(docPath)}`);
-  assert.equal(after.openAnnotations, 1);
-  assert.equal(after.carriedOver, 2);
+  assert.equal(after.openAnnotations, 3);
+  assert.equal(after.carriedOver, 0);
   assert.match(after.markdown, /## Required Changes/);
   assert.match(after.markdown, /Live note/);
-  assert.doesNotMatch(after.markdown, /Gone note one/);
-  assert.doesNotMatch(after.markdown, /Gone note two/);
+  assert.match(after.markdown, /Gone note one/);
+  assert.match(after.markdown, /Gone note two/);
   assert.doesNotMatch(after.markdown, /## Carried Over/);
-  assert.doesNotMatch(after.markdown, /\(anchor not found\)/);
+  assert.match(after.markdown, /\(anchor not found\)/);
 
   await json(`${base}/api/session/finish`, {
     method: "POST",
@@ -78,8 +76,8 @@ test("stale prior-pass annotations are carried over, not re-exported as live act
   const completion = await waiter.wait();
   assert.equal(completion.status, "finished");
   if (completion.status === "finished") {
-    assert.equal(completion.openAnnotations, 1);
-    assert.equal(completion.carriedOver, 2);
+    assert.equal(completion.openAnnotations, 3);
+    assert.equal(completion.carriedOver, 0);
   }
 });
 

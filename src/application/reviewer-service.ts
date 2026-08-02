@@ -1,15 +1,23 @@
 import { sectionForLine } from "../domain/document.ts";
+import { AppError, isErrno } from "../domain/errors.ts";
 import {
   createEmptyReview,
+  normalizeActiveMsDelta,
   normalizeMetrics,
   normalizeReviewDraft,
   sourceTextForLines,
   withResolvedAnchors,
-  type Annotation,
   type Review,
   type ReviewDraft,
 } from "../domain/review.ts";
 import { exportReviewMarkdown, reviewExportCounts } from "./export-review.ts";
+import {
+  assertBaseRevision,
+  assertDerivedAnchors,
+  assertDraftRangeBounds,
+  isContentRejection,
+  sameSavedRange,
+} from "./review-validation.ts";
 import type { DocumentReader, RecentReview, ReviewSourceState, ReviewStore } from "./ports.ts";
 
 export interface OpenDocumentResult {
@@ -28,12 +36,15 @@ export class ReviewerService {
     this.store = store;
   }
 
+  resolveDocumentPath(path: string): string {
+    return this.reader.resolvePath(path);
+  }
+
   private readonly locks = new Map<string, Promise<void>>();
 
-  // Serialize load→modify→save per document path. The JSON store has no atomicity, so without this an
-  // active-time flush (addActiveTime) racing a saveReview could load a stale snapshot and write it back,
-  // reverting the user's latest annotations — last write wins. Single-process local server, so an
-  // in-memory promise chain per path is sufficient; the entry self-cleans once the chain drains.
+  // Serialize load→modify→save per document path so a passive active-time flush cannot replace newer
+  // content from a stale snapshot. Atomic files prevent torn storage; this lock prevents in-process
+  // lost updates. The entry self-cleans once the promise chain drains.
   private synchronized<T>(path: string, fn: () => Promise<T>): Promise<T> {
     const previous = this.locks.get(path) ?? Promise.resolve();
     const result = previous.then(fn, fn);
@@ -65,50 +76,92 @@ export class ReviewerService {
 
   async documentPathForSession(id: string): Promise<string> {
     const review = await this.store.loadById(id);
-    if (review == null) throw new Error("session not found");
+    if (review == null) throw new AppError("not_found", 404, "Session not found");
     return review.documentPath;
   }
 
   async saveReview(draft: ReviewDraft): Promise<Review> {
-    const { document } = await this.reader.readMarkdown(draft.path);
-    return this.synchronized(document.path, async () => {
+    const path = this.reader.resolvePath(draft.path);
+    return this.synchronized(path, async () => {
+      const { document } = await this.reader.readMarkdown(path);
       const previous = await this.store.load(document.path);
-      const previousAnchors = new Map(previous?.annotations.map((item) => [item.id, item]) ?? []);
-      const digest = previous != null && previous.documentDigest !== document.digest
-        ? previous.documentDigest
-        : document.digest;
-      const review = normalizeReviewDraft(
-        { ...draft, path: document.path },
-        digest,
-        (line) => sectionForLine(document, line),
-        (annotation) => {
-          const previousAnchor = previousAnchors.get(annotation.id);
-          if (
-            previousAnchor != null
-            && sameSavedRange(previousAnchor, annotation)
-            && previousAnchor.anchorText != null
-          ) {
-            return previousAnchor.anchorText;
+      const contentChange = draft.summary !== undefined || draft.annotations !== undefined;
+      const stored = previous ?? createEmptyReview(document.path, document.digest);
+      const metrics = normalizeMetrics(stored.metrics, draft.activeMsDelta);
+      if (!contentChange) {
+        const updated = { ...stored, metrics };
+        if (updated.metrics.activeMs !== stored.metrics.activeMs) await this.store.save(updated);
+        return withResolvedAnchors(document, updated);
+      }
+      try {
+        assertBaseRevision(draft.baseRevision, previous?.revision ?? 0);
+        assertDraftRangeBounds(draft.annotations, previous, document.lines.length);
+        const previousAnchors = new Map(previous?.annotations.map((item) => [item.id, item]) ?? []);
+        const digest = previous != null && previous.documentDigest !== document.digest
+          ? previous.documentDigest
+          : document.digest;
+        const review = normalizeReviewDraft(
+          { ...draft, activeMsDelta: undefined, path: document.path },
+          digest,
+          (line) => sectionForLine(document, line),
+          (annotation) => {
+            const previousAnchor = previousAnchors.get(annotation.id);
+            if (previousAnchor != null && sameSavedRange(previousAnchor, annotation)) return previousAnchor.anchorText;
+            return sourceTextForLines(document, annotation.lineStart, annotation.lineEnd);
+          },
+          previous,
+        );
+        assertDerivedAnchors(review, previous);
+        review.metrics = metrics;
+        review.revision = (previous?.revision ?? 0) + 1;
+        await this.store.save(review);
+        return withResolvedAnchors(document, review);
+      } catch (error) {
+        if (isContentRejection(error) && metrics.activeMs !== stored.metrics.activeMs) {
+          try {
+            await this.store.save({ ...stored, metrics });
+          } catch (storageError) {
+            const storageCode = storageError instanceof AppError ? storageError.code : "internal_error";
+            throw new AppError(
+              "review_rejected_metrics_persist_failed",
+              500,
+              `${error.message}; active time storage could not be confirmed`,
+              { rejection: error.code, storage: storageCode },
+            );
           }
-          return sourceTextForLines(document, annotation.lineStart, annotation.lineEnd);
-        },
-        previous,
-      );
-      if (previous != null) review.createdAt = previous.createdAt;
-      await this.store.save(review);
-      return withResolvedAnchors(document, review);
+        }
+        throw error;
+      }
     });
   }
 
   async exportReview(path: string): Promise<{ markdown: string; openAnnotations: number; carriedOver: number; activeMs: number }> {
-    const { document } = await this.reader.readMarkdown(path);
-    const review = await this.store.load(document.path) ?? createEmptyReview(document.path, document.digest);
-    const resolved = withResolvedAnchors(document, review);
-    return {
-      markdown: exportReviewMarkdown(document, resolved),
-      ...reviewExportCounts(document, resolved),
-      activeMs: review.metrics?.activeMs ?? 0,
-    };
+    const resolvedPath = this.reader.resolvePath(path);
+    return this.synchronized(resolvedPath, async () => this.exportLocked(resolvedPath));
+  }
+
+  async finishReview(path: string, delta: unknown) {
+    const resolvedPath = this.reader.resolvePath(path);
+    return this.synchronized(resolvedPath, async () => {
+      const { document } = await this.reader.readMarkdown(resolvedPath);
+      const stored = await this.store.load(document.path);
+      const review = stored ?? createEmptyReview(document.path, document.digest);
+      const updated = { ...review, metrics: normalizeMetrics(review.metrics, delta) };
+      if (updated.metrics.activeMs !== review.metrics.activeMs) await this.store.save(updated);
+      const resolved = withResolvedAnchors(document, updated);
+      return exportResult(document, resolved);
+    });
+  }
+
+  async cancelReview(path: string, delta: unknown): Promise<number> {
+    const resolvedPath = this.reader.resolvePath(path);
+    return this.synchronized(resolvedPath, async () => {
+      const stored = await this.store.load(resolvedPath);
+      if (stored == null) return normalizeActiveMsDelta(delta);
+      const updated = { ...stored, metrics: normalizeMetrics(stored.metrics, delta) };
+      if (updated.metrics.activeMs !== stored.metrics.activeMs) await this.store.save(updated);
+      return updated.metrics.activeMs;
+    });
   }
 
   // Accumulate active-reviewing time WITHOUT touching annotations, summary, or timestamps. Used by the
@@ -116,11 +169,12 @@ export class ReviewerService {
   // If no review is stored yet (a read-only session that never saved feedback), one is created so a
   // reviewer who only reads and finishes still records their active time. Serialized per path.
   async addActiveTime(path: string, delta: unknown): Promise<Review> {
-    const { document } = await this.reader.readMarkdown(path);
-    return this.synchronized(document.path, async () => {
+    const resolvedPath = this.reader.resolvePath(path);
+    return this.synchronized(resolvedPath, async () => {
+      const { document } = await this.reader.readMarkdown(resolvedPath);
       const stored = await this.store.load(document.path) ?? createEmptyReview(document.path, document.digest);
       const updated: Review = { ...stored, metrics: normalizeMetrics(stored.metrics, delta) };
-      await this.store.save(updated);
+      if (updated.metrics.activeMs !== stored.metrics.activeMs) await this.store.save(updated);
       return withResolvedAnchors(document, updated);
     });
   }
@@ -135,16 +189,27 @@ export class ReviewerService {
           sourceState: document.digest === review.documentDigest ? "current" : "changed",
           currentDigest: document.digest,
         };
-      } catch {
-        return { ...review, sourceState: "missing", currentDigest: null };
+      } catch (error) {
+        if (isErrno(error, "ENOENT")) return { ...review, sourceState: "missing", currentDigest: null };
+        throw error;
       }
     }));
   }
+
+  private async exportLocked(path: string) {
+    const { document } = await this.reader.readMarkdown(path);
+    const review = await this.store.load(document.path) ?? createEmptyReview(document.path, document.digest);
+    return exportResult(document, withResolvedAnchors(document, review));
+  }
 }
 
-function sameSavedRange(
-  previous: Annotation | undefined,
-  next: Pick<Annotation, "lineStart" | "lineEnd">,
-): boolean {
-  return previous != null && previous.lineStart === next.lineStart && previous.lineEnd === next.lineEnd;
+function exportResult(
+  document: OpenDocumentResult["document"],
+  review: Review,
+): { markdown: string; openAnnotations: number; carriedOver: number; activeMs: number } {
+  return {
+    markdown: exportReviewMarkdown(document, review),
+    ...reviewExportCounts(document, review),
+    activeMs: review.metrics.activeMs,
+  };
 }

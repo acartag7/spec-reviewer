@@ -20,6 +20,7 @@ interface WorkspaceProps {
   onFormReset: () => void
   onOpenAnnotation: (annotation: Annotation) => void
   onEditAnnotation: (annotation: Annotation) => void
+  onStatusAnnotation: (annotation: Annotation, status: Annotation["status"]) => void
   onDeleteAnnotation: (annotation: Annotation) => void
   onCopyExport: () => void
 }
@@ -46,9 +47,10 @@ export function Workspace(props: WorkspaceProps) {
         <div className="border-t" />
         <AnnotationList
           annotations={props.review.annotations}
-          stale={props.sourceState === "changed"}
+          saving={props.saving}
           onOpen={props.onOpenAnnotation}
           onEdit={props.onEditAnnotation}
+          onStatus={props.onStatusAnnotation}
           onDelete={props.onDeleteAnnotation}
         />
         <div className="border-t" />

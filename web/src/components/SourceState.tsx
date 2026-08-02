@@ -37,7 +37,7 @@ export function SourceStateBanner({ state, annotations = [] }: SourceStateBanner
   return (
     <div
       role={drift.total > 0 ? "alert" : "status"}
-      className={cn("rounded-lg border px-3 py-2 text-sm", bannerClass(state, drift.total > 0, drift.notFound > 0))}
+      className={cn("rounded-lg border px-3 py-2 text-sm", bannerClass(state, drift.total > 0, drift.notFound + drift.ambiguous > 0))}
     >
       {message}
     </div>

@@ -8,38 +8,46 @@ import { SessionOutcomeScreen } from "@/components/SessionOutcomeScreen"
 import { StatusToast } from "@/components/StatusToast"
 import { TopBar } from "@/components/TopBar"
 import { Workspace } from "@/components/Workspace"
-import { createAnnotation, emptyForm, formFromAnnotation, removeAnnotation, upsertAnnotation } from "@/lib/review-utils"
+import { createAnnotation, formFromAnnotation, removeAnnotation, upsertAnnotation } from "@/lib/review-utils"
 import type { AnnotationFormValue } from "@/lib/review-utils"
 import { isMarkdownFile } from "@/lib/path-utils"
+import { scrollToLine } from "@/lib/scroll-to-line"
+import { recoverFailedSave } from "@/lib/save-recovery"
 import { useActiveReviewTime } from "@/lib/use-active-review-time"
+import { useReviewDraft } from "@/lib/use-review-draft"
+import { useTerminalReview } from "@/lib/use-terminal-review"
 
 const initialSelection: SelectionRange = { lineStart: 1, lineEnd: 1, selectedText: "" }
-
+type SaveIntent = { review: Review; submittedForm: AnnotationFormValue; submittedSelection: SelectionRange; clearFormOnSuccess: boolean }
 export function ReviewerPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const timeoutRef = useRef<number | null>(null)
+  const confirmedReviewRef = useRef<Review | null>(null)
+  const saveInFlightRef = useRef(false)
   const requestedPath = searchParams.get("path") ?? ""
   const [document, setDocument] = useState<ReviewDocument | null>(null)
   const [review, setReview] = useState<Review | null>(null)
-  const [selection, setSelection] = useState<SelectionRange>(initialSelection)
-  const [form, setForm] = useState<AnnotationFormValue>(() => emptyForm(initialSelection))
+  const { selection, selectionRef, form, formRef, updateForm, resetDraft, selectLines, resetForm, clearSubmittedForm } = useReviewDraft(initialSelection)
   const [sourceState, setSourceState] = useState<ReviewSourceState>("unreviewed")
   const [status, setStatus] = useState("")
-  const [sessionOutcome, setSessionOutcome] = useState<{ outcome: "finished" | "canceled"; openAnnotations: number; carriedOver: number; activeMs: number } | null>(null)
-
   const showStatus = useCallback((message: string) => {
     setStatus(message)
     if (timeoutRef.current != null) window.clearTimeout(timeoutRef.current)
     timeoutRef.current = window.setTimeout(() => setStatus(""), 1800)
   }, [])
-
   const { flush: flushActiveTime } = useActiveReviewTime({
     path: document?.path ?? null,
     onAutoFlush: (delta, path) => { if (path != null) recordActiveTime(path, delta) },
   })
-
   const configQuery = useQuery({ queryKey: ["config"], queryFn: api.config })
+  const terminal = useTerminalReview({
+    documentPath: document?.path ?? null,
+    sessionPath: configQuery.data?.defaultDocumentPath ?? null,
+    saveInFlightRef,
+    flushActiveTime,
+    showStatus,
+  })
   const reviewsQuery = useQuery({ queryKey: ["reviews"], queryFn: api.recentReviews })
   const documentQuery = useQuery({
     queryKey: ["document", requestedPath],
@@ -51,54 +59,64 @@ export function ReviewerPage() {
     queryFn: () => api.exportReview(document?.path ?? ""),
     enabled: document != null,
   })
-
-  const applyOpenResult = useCallback((result: OpenDocumentResult) => {
+  const applyOpenResult = useCallback((result: OpenDocumentResult, shouldResetDraft = true) => {
     const nextSelection = { lineStart: 1, lineEnd: 1, selectedText: "" }
     setDocument(result.document)
     setReview(result.review)
-    setSelection(nextSelection)
-    setForm(emptyForm(nextSelection))
+    confirmedReviewRef.current = result.review
+    if (shouldResetDraft) resetDraft(nextSelection)
     setSourceState(result.sourceState ?? (result.stale ? "changed" : "current"))
-  }, [])
-
+  }, [resetDraft])
   useEffect(() => {
     if (requestedPath === "" && configQuery.data?.defaultDocumentPath) {
       setSearchParams({ path: configQuery.data.defaultDocumentPath }, { replace: true })
     }
   }, [configQuery.data?.defaultDocumentPath, requestedPath, setSearchParams])
-
   useEffect(() => {
     if (documentQuery.data != null) {
       applyOpenResult(documentQuery.data)
       showStatus(documentQuery.data.stale ? "Loaded with stale annotations" : "Loaded")
     }
   }, [applyOpenResult, documentQuery.data, showStatus])
-
   useEffect(() => {
     if (documentQuery.error instanceof Error) showStatus(documentQuery.error.message)
     if (configQuery.error instanceof Error) showStatus(configQuery.error.message)
   }, [configQuery.error, documentQuery.error, showStatus])
-
   const saveMutation = useMutation({
-    mutationFn: (nextReview: Review) => {
+    mutationFn: ({ review: nextReview }: SaveIntent) => {
       if (document == null) throw new Error("Open a document first")
       return api.saveReview({
         path: document.path,
+        baseRevision: nextReview.revision,
         summary: nextReview.summary,
         annotations: nextReview.annotations,
         activeMsDelta: flushActiveTime(),
       })
     },
-    onSuccess: (saved) => {
+    onSuccess: (saved, intent) => {
       setReview(saved)
+      confirmedReviewRef.current = saved
+      if (intent.clearFormOnSuccess) clearSubmittedForm(intent.submittedForm, intent.submittedSelection)
       setSourceState((state) => (state === "changed" ? "changed" : "current"))
       void queryClient.invalidateQueries({ queryKey: ["reviews"] })
       void queryClient.invalidateQueries({ queryKey: ["export", document?.path] })
       showStatus("Saved")
     },
-    onError: (error) => showStatus(error instanceof Error ? error.message : String(error)),
+    onError: async (error) => {
+      const reloaded = await recoverFailedSave(
+        document?.path ?? null,
+        confirmedReviewRef.current,
+        setReview,
+        (result) => applyOpenResult(result, false),
+      )
+      if (reloaded && document != null) void queryClient.invalidateQueries({ queryKey: ["export", document.path] })
+      const message = error instanceof Error ? error.message : String(error)
+      showStatus(`${message}. ${reloaded ? "Reloaded the saved review" : "Unsaved change reverted; reload before saving again"}`)
+    },
+    onSettled: () => {
+      saveInFlightRef.current = false
+    },
   })
-
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       if (!isMarkdownFile(file.name)) throw new Error("Drop a .md or .markdown file")
@@ -112,29 +130,6 @@ export function ReviewerPage() {
     },
     onError: (error) => showStatus(error instanceof Error ? error.message : String(error)),
   })
-
-  const finishMutation = useMutation({
-    mutationFn: (activeMsDelta: number) => {
-      if (document == null) throw new Error("Open a document first")
-      return api.finishReview(document.path, activeMsDelta)
-    },
-    onSuccess: (completion) => {
-      if (completion.status === "finished") setSessionOutcome({ outcome: "finished", openAnnotations: completion.openAnnotations, carriedOver: completion.carriedOver, activeMs: completion.activeMs })
-    },
-    onError: (error) => showStatus(error instanceof Error ? error.message : String(error)),
-  })
-
-  const cancelMutation = useMutation({
-    mutationFn: (activeMsDelta: number) => {
-      if (document == null) throw new Error("Open a document first")
-      return api.cancelReview(document.path, activeMsDelta)
-    },
-    onSuccess: (completion) => {
-      if (completion.status === "canceled") setSessionOutcome({ outcome: "canceled", openAnnotations: 0, carriedOver: 0, activeMs: completion.activeMs })
-    },
-    onError: (error) => showStatus(error instanceof Error ? error.message : String(error)),
-  })
-
   function openPath(path: string) {
     if (path.trim() === "") {
       showStatus("Enter a Markdown path")
@@ -143,27 +138,26 @@ export function ReviewerPage() {
     setSearchParams({ path: path.trim() }, { replace: true })
   }
 
-  function selectLines(nextSelection: SelectionRange) {
-    setSelection(nextSelection)
-    setForm((current) => ({
-      ...current,
-      lineStart: nextSelection.lineStart,
-      lineEnd: nextSelection.lineEnd,
-      selectedText: nextSelection.selectedText,
-    }))
-  }
-
-  function saveReview(nextReview: Review) {
+  function saveReview(nextReview: Review, clearFormOnSuccess = false) {
+    if (saveInFlightRef.current || terminal.isInFlight()) return showStatus("Wait for the pending operation")
     setReview(nextReview)
-    saveMutation.mutate(nextReview)
+    saveInFlightRef.current = true
+    saveMutation.mutate({
+      review: nextReview,
+      submittedForm: formRef.current,
+      submittedSelection: selectionRef.current,
+      clearFormOnSuccess,
+    })
   }
 
   function addOrUpdateAnnotation() {
     if (review == null) return showStatus("Open a document first")
     const annotation = createAnnotation(form, selection)
     if (!annotation.note) return showStatus("Feedback is required")
-    saveReview(upsertAnnotation(review, annotation))
-    setForm(emptyForm(selection))
+    if (form.id !== annotation.id || form.createdAt !== annotation.createdAt) {
+      updateForm({ ...form, id: annotation.id, createdAt: annotation.createdAt })
+    }
+    saveReview(upsertAnnotation(review, annotation), true)
   }
 
   function deleteAnnotation(annotation: Annotation) {
@@ -171,8 +165,14 @@ export function ReviewerPage() {
     saveReview(removeAnnotation(review, annotation.id))
   }
 
+  function setAnnotationStatus(annotation: Annotation, status: Annotation["status"]) {
+    if (review == null) return
+    saveReview(upsertAnnotation(review, { ...annotation, status, updatedAt: new Date().toISOString() }))
+  }
+
   async function copyExport() {
     if (document == null) return showStatus("Open a document first")
+    if (saveInFlightRef.current || terminal.isInFlight()) return showStatus("Wait for the pending operation")
     const result = await exportQuery.refetch()
     const markdown = result.data?.markdown ?? exportQuery.data?.markdown ?? ""
     try {
@@ -183,12 +183,14 @@ export function ReviewerPage() {
     }
   }
 
-  const canCopy = document != null
-  const exportMarkdown = exportQuery.data?.markdown ?? ""
-  const finishing = finishMutation.isPending || cancelMutation.isPending
+  const saving = saveMutation.isPending
+  const reviewLocked = saving || terminal.pending
+  const canCopy = document != null && !reviewLocked
+  const sessionPath = configQuery.data?.defaultDocumentPath ?? null
+  const canFinish = document != null && document.path === sessionPath && !reviewLocked
 
-  if (sessionOutcome != null) {
-    return <SessionOutcomeScreen outcome={sessionOutcome.outcome} openAnnotations={sessionOutcome.openAnnotations} carriedOver={sessionOutcome.carriedOver} activeMs={sessionOutcome.activeMs} />
+  if (terminal.outcome != null) {
+    return <SessionOutcomeScreen outcome={terminal.outcome.outcome} openAnnotations={terminal.outcome.openAnnotations} activeMs={terminal.outcome.activeMs} />
   }
 
   return (
@@ -197,11 +199,12 @@ export function ReviewerPage() {
         path={document?.path ?? requestedPath}
         sourceState={sourceState}
         canCopy={canCopy}
+        canFinish={canFinish}
         waitForReview={configQuery.data?.waitForReview ?? false}
-        finishing={finishing}
+        finishing={reviewLocked}
         onCopy={copyExport}
-        onFinish={() => finishMutation.mutate(flushActiveTime())}
-        onCancel={() => cancelMutation.mutate(flushActiveTime())}
+        onFinish={terminal.finish}
+        onCancel={terminal.cancel}
       />
       {document != null && review != null ? (
         <Workspace
@@ -210,15 +213,16 @@ export function ReviewerPage() {
           selection={selection}
           sourceState={sourceState}
           form={form}
-          exportMarkdown={exportMarkdown}
+          exportMarkdown={exportQuery.data?.markdown ?? ""}
           exportLoading={exportQuery.isLoading || exportQuery.isFetching}
-          saving={saveMutation.isPending}
+          saving={reviewLocked}
           onSelection={selectLines}
-          onFormChange={setForm}
+          onFormChange={updateForm}
           onFormSubmit={addOrUpdateAnnotation}
-          onFormReset={() => setForm(emptyForm(selection))}
+          onFormReset={resetForm}
           onOpenAnnotation={(annotation) => scrollToLine(annotation.lineStart)}
-          onEditAnnotation={(annotation) => setForm(formFromAnnotation(annotation))}
+          onEditAnnotation={(annotation) => updateForm(formFromAnnotation(annotation))}
+          onStatusAnnotation={setAnnotationStatus}
           onDeleteAnnotation={deleteAnnotation}
           onCopyExport={copyExport}
         />
@@ -234,16 +238,4 @@ export function ReviewerPage() {
       <StatusToast message={status} />
     </div>
   )
-}
-
-function scrollToLine(line: number) {
-  const exact = window.document.querySelector(`[data-line="${line}"], [data-source-line="${line}"]`)
-  const ranged = Array.from(window.document.querySelectorAll<HTMLElement>("[data-source-line][data-source-end-line]"))
-    .find((element) => {
-      const start = Number(element.dataset.sourceLine)
-      const end = Number(element.dataset.sourceEndLine)
-      return start <= line && end >= line
-    })
-  const target = exact ?? ranged
-  target?.scrollIntoView({ block: "center", behavior: "smooth" })
 }

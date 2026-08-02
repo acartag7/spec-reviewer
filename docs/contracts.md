@@ -1,7 +1,11 @@
 # Contracts
 
 The tool is local-first. It does not mutate reviewed files. Review state lives in
-the storage directory, keyed by the absolute document path.
+the storage directory, keyed by a canonical textual document path. Canonical here
+means expanding a leading `~/` and applying absolute path resolution. It does not
+use `realpath`, case folding, or inode identity, so symlink aliases and differently
+cased paths remain different review records. Every server path uses this same
+textual normalization before locking, storage lookup, or wait-session comparison.
 
 ## Document Open
 
@@ -23,6 +27,7 @@ Response:
   "review": {
     "documentPath": "/absolute/spec.md",
     "documentDigest": "sha256...",
+    "revision": 0,
     "summary": "",
     "annotations": []
   },
@@ -34,12 +39,15 @@ Response:
 `sourceState` values:
 
 - `unreviewed`: no saved notes exist for the current digest.
-- `current`: saved notes match the current file digest.
+- `current`: the saved review digest matches the current file digest.
 - `changed`: the file changed since notes were saved.
 - `missing`: recent-review list only; the saved source path no longer exists.
 
 When `sourceState` is `changed`, line anchors may be stale and should be
 manually rechecked before sending feedback to an agent.
+
+`sourceState` describes only whole-file digest equality. Per-annotation
+`anchorState` remains authoritative even when `sourceState` is `current`.
 
 Saving a changed review does not clear the changed state. A later explicit anchor
 re-sync flow should be responsible for clearing stale state.
@@ -55,6 +63,7 @@ Request:
 ```json
 {
   "path": "/absolute/spec.md",
+  "baseRevision": 0,
   "summary": "Overall feedback",
   "annotations": [
     {
@@ -73,11 +82,77 @@ Request:
 
 `severity` values: `blocker`, `major`, `minor`, `note`.
 
-`anchorState` values: `ok`, `moved`, `not-found`.
+`anchorState` values: `ok`, `moved`, `ambiguous`, `not-found`.
 
 The server stores the original `anchorText` for each note. Open/export responses
 resolve that text against the current document and expose transient `anchor` and
 `anchorState` response fields.
+
+Review saves preserve omitted fields and reject stale content writes:
+
+- `path` is a required non-blank string and uses the textual normalization
+  defined above.
+- Omitting `summary` or `annotations` preserves the stored value. Supplying a
+  string summary or an annotation array replaces that value; an empty string or
+  empty array intentionally clears it. Other types are rejected.
+- A request that supplies `summary` or `annotations` must include integer
+  `baseRevision`. It must equal the stored `revision`, or `0` for an unsaved
+  review. A mismatch returns `409 review_conflict` without writing. A successful
+  content save increments `revision`. This prevents stale tabs in one server
+  process from replacing newer feedback.
+- `activeMsDelta` accumulates independently, does not increment `revision`, and
+  never erases content. A request containing only this delta does not need a
+  revision precondition.
+- The document snapshot is read after the per-path operation lock is acquired.
+  The complete request is validated against that snapshot before a storage write.
+  A validation rejection returns `400 invalid_review` and leaves review content
+  unchanged. A valid `activeMsDelta` remains independent and may still be stored.
+  Storage, I/O, and commit-indeterminate failures do not promise whether that
+  delta committed; the next validated load is the source of truth. If persisting
+  that delta fails while content is rejected, the fixed error reports both the
+  original rejection and the unconfirmed metric write.
+  An external editor can still change the source after the snapshot; the next
+  open detects that through the digest and anchor states.
+
+An explicit annotation array contains at most 200 items. Every item must be an
+object with a non-blank note, allowed enum values, and positive integer lines
+where `lineEnd >= lineStart`. A new or changed range must exist in the current
+document, span at most 500 lines, derive at most 64 KiB of UTF-8 anchor text, and
+contain at least one non-blank source line. The total span across an explicit
+array is at most 20,000 lines. These limits bound server-owned anchor storage and
+request-time range work in addition to the existing 3 MiB request and 2 MiB
+document limits. Anchor drift lookup builds one document text index and uses
+bounded substring searches instead of rebuilding every candidate line range.
+An existing legacy review above the annotation-count limit may submit only a
+strict deletion containing stored IDs at unchanged ranges until it is back within
+the current limit. A review above the total-span limit may make that same
+progressive deletion, or change ranges if the resulting total is within the
+current limit.
+
+An item whose `(id, lineStart, lineEnd)` exactly matches a stored annotation must
+remain valid after the document shrinks. It keeps its server-owned anchor,
+selected text, and creation time while `note`, `kind`, `severity`, `status`, and
+`agentAction` remain editable. This includes legacy annotations with no anchor,
+which stay editable and export with a manual-check warning. Duplicate non-blank
+IDs are rejected, and IDs are bounded to 128 UTF-8 bytes.
+
+The server owns anchor text, selected text, section names, and timestamps. It
+derives selected text from the verified source anchor instead of accepting the
+client's quote as evidence. Request fields outside the accepted annotation input
+set (`id`, lines, kind, severity, status, note, and `agentAction`) are ignored.
+The bundled UI sends only that accepted annotation input set.
+Summary, note, and agent-action strings are each bounded to 64 KiB UTF-8.
+An unchanged oversized legacy value may survive a repair save, but changing that
+value requires bringing it within the current limit.
+
+The UI may show a content save optimistically, but a failed save restores or
+reloads the server-confirmed review. A failed add or edit preserves the reviewer's
+form contents so the feedback can be corrected and retried.
+Open and resolved annotations are shown separately. Reviewers can resolve or
+reopen a note directly, and editing preserves both its status and agent action.
+
+Saving against a changed document does not silently advance the saved digest or
+resolve feedback. Explicit review-round semantics are a separate contract.
 
 ## Export
 
@@ -98,9 +173,79 @@ document path, digest, overall summary, and open annotations grouped by severity
 If the current file digest differs from the saved review digest, export includes
 a warning and the current digest.
 
-If an annotation anchor moved, export marks the saved range and current range. If
-the saved source text is not found, export marks the annotation as not found. In
-both drift cases, export omits the old selected-text quote.
+If an annotation anchor has one exact occurrence elsewhere, export marks the
+saved range and current range. If it occurs more than once, export marks it
+ambiguous and never silently selects the first occurrence. Anchor whitespace is
+exact apart from CRLF normalization because Markdown indentation is semantic.
+Verified selected source is emitted as a fenced block without stripping numbers,
+blank lines, or relative indentation. Export and the read-only form field use
+the transient verified current anchor source, never a legacy client quote. If
+the saved source text is not found, export marks the annotation as not found. An
+open annotation is always exported until the human explicitly resolves or deletes
+it; missing source text is not proof that the requested change was made. In drift
+or legacy no-anchor cases, export omits the unverified selected-text quote.
+
+The JSON completion field `carriedOver` remains for compatibility in this change
+but is always `0` because no unresolved annotation is suppressed. User-facing
+copy does not present that compatibility field as meaningful review information.
+
+## Waiting Session Completion
+
+`POST /api/session/finish` and `POST /api/session/cancel` are bound to the
+canonical document path that created the waiting session. A different path is
+rejected with `400 session_path_mismatch` before active-time persistence, export,
+or session completion. The UI always sends the configured waiting-session path,
+not whichever document is currently visible.
+
+The first path-valid terminal request claims the session synchronously before any
+await. A concurrent Finish, Cancel, or repeat request shares that first attempt's
+result, so the terminal active-time delta is consumed at most once. A failed
+attempt releases the claim and leaves the session waiting; its terminal delta may
+be lost but is never applied again by that session. A later Cancel can therefore
+end a session whose source document disappeared. Cancel does not need to read or
+export the source file; if stored review state exists it adds the delta there,
+otherwise it returns the session delta without materializing an invalid review.
+The UI renders the returned terminal status even when another tab claimed the
+opposite action first.
+
+## Review Storage Integrity
+
+Review JSON and copied upload documents use the same atomic replacement primitive.
+A save serializes and validates content before filesystem changes, verifies that
+the target subdirectory is a real directory, enforces `0700` on it, writes the
+complete content to an exclusively created no-follow `0600` temporary file,
+syncs it, atomically renames it over the destination, then syncs the directory.
+Temporary names end in `.tmp`, never `.json`.
+
+A failure before rename preserves the prior destination. If both the primary
+operation and cleanup fail, the fixed error identifies both reason codes without
+including file contents. A directory-sync failure after rename returns
+`500 storage_commit_indeterminate`: the new file may already be visible, and the
+next validated load is the source of truth. This persistence failure is distinct
+from a request-validation rejection.
+
+Recent-review listing skips only a file that disappears during the list/read
+race. One validated parser is used by document load, session-ID load, and recent
+listing. Malformed JSON, an invalid stored shape, or a filename/path-key mismatch
+fails the whole operation with `500 review_store_corrupt`, the allowlisted review
+filename, and no raw parser message or review contents. `sessions` exits non-zero.
+
+Read compatibility is broader than new-write validation because prior releases
+accepted larger client fields, arbitrary string timestamps, long IDs, and more
+than 200 annotations. Structurally valid legacy records remain loadable and can
+be progressively reduced and repaired in the UI. Compatibility is still
+hard-bounded to a 16 MiB review
+file, 5,000 annotations, and 8 MiB per stored text field. New API requests remain
+subject to the smaller limits in Save Review.
+
+The in-process lock plus revision precondition protects concurrent tabs served by
+one process. Running multiple Spec Reviewer processes against the same storage
+directory is unsupported and can still cause last-write-wins replacement; atomic
+rename prevents torn files, not cross-process lost updates. Same-user filesystem
+replacement races after directory verification are also out of scope.
+
+This integrity contract does not add immutable run history, review outcome
+taxonomy, automatic port selection, or installed-version reporting.
 
 ## Local Server Security
 

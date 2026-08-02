@@ -1,5 +1,17 @@
 import type { OpenDocumentResult, RecentReview, Review, ReviewCompletion, ReviewDraft } from "@/api/types"
 
+export class ApiError extends Error {
+  readonly status: number
+  readonly code: string
+
+  constructor(status: number, code: string, message: string) {
+    super(message)
+    this.name = "ApiError"
+    this.status = status
+    this.code = code
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const response = await fetch(path, {
     method,
@@ -9,7 +21,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const text = await response.text()
   const data = text.trim() === "" ? null : JSON.parse(text)
   if (!response.ok) {
-    throw new Error(data?.error?.message ?? response.statusText)
+    throw new ApiError(
+      response.status,
+      data?.error?.code ?? "request_failed",
+      data?.error?.message ?? response.statusText,
+    )
   }
   return data as T
 }
@@ -24,7 +40,19 @@ export const api = {
   uploadDocument: (file: { name: string; content: string }) => {
     return request<OpenDocumentResult>("POST", "/api/document-upload", file)
   },
-  saveReview: (review: ReviewDraft) => request<Review>("POST", "/api/review", review),
+  saveReview: (review: ReviewDraft) => request<Review>("POST", "/api/review", {
+    ...review,
+    annotations: review.annotations.map((annotation) => ({
+      id: annotation.id,
+      lineStart: annotation.lineStart,
+      lineEnd: annotation.lineEnd,
+      kind: annotation.kind,
+      severity: annotation.severity,
+      status: annotation.status,
+      note: annotation.note,
+      agentAction: annotation.agentAction,
+    })),
+  }),
   exportReview: (path: string) => {
     const encoded = encodeURIComponent(path)
     return request<{ markdown: string }>("GET", `/api/export?path=${encoded}`)

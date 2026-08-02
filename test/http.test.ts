@@ -22,6 +22,7 @@ test("HTTP API opens, saves, and exports a review", async (t) => {
     storageDir: join(dir, "store"),
     defaultDocumentPath: docPath,
     sessionId: null,
+    skillArgs: [],
     command: "review",
     waitForReview: false,
     jsonOutput: false,
@@ -32,10 +33,7 @@ test("HTTP API opens, saves, and exports a review", async (t) => {
   const server = createHttpServer(config, service, join(process.cwd(), "public"));
   t.after(() => server.close());
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.notEqual(address, null);
-  assert.notEqual(typeof address, "string");
-  const base = `http://127.0.0.1:${address.port}`;
+  const base = `http://127.0.0.1:${serverPort(server)}`;
 
   const opened = await json(`${base}/api/document?path=${encodeURIComponent(docPath)}`);
   assert.equal(opened.document.title, "Demo");
@@ -44,6 +42,7 @@ test("HTTP API opens, saves, and exports a review", async (t) => {
     method: "POST",
     body: JSON.stringify({
       path: docPath,
+      baseRevision: 0,
       summary: "Summary",
       annotations: [{ lineStart: 3, lineEnd: 3, kind: "issue", severity: "major", note: "Fix this" }],
     }),
@@ -51,17 +50,16 @@ test("HTTP API opens, saves, and exports a review", async (t) => {
   });
   const exported = await json(`${base}/api/export?path=${encodeURIComponent(docPath)}`);
   assert.match(exported.markdown, /Fix this/);
-
   await writeFile(docPath, "# Demo\n\nChanged\n", "utf8");
   const changed = await json(`${base}/api/document?path=${encodeURIComponent(docPath)}`);
   assert.equal(changed.sourceState, "changed");
   assert.equal(changed.stale, true);
   assert.equal(changed.review.annotations[0].anchorState, "not-found");
-
   await json(`${base}/api/review`, {
     method: "POST",
     body: JSON.stringify({
       path: docPath,
+      baseRevision: saved.revision,
       summary: "Summary",
       annotations: [{
         id: saved.annotations[0].id,
@@ -77,7 +75,6 @@ test("HTTP API opens, saves, and exports a review", async (t) => {
   const afterSave = await json(`${base}/api/document?path=${encodeURIComponent(docPath)}`);
   assert.equal(afterSave.sourceState, "changed");
   assert.equal(afterSave.review.annotations[0].anchorState, "not-found");
-
   const recent = await json(`${base}/api/reviews`);
   assert.equal(recent[0].sourceState, "changed");
   assert.equal(await service.documentPathForSession(recent[0].id), docPath);
@@ -93,6 +90,7 @@ test("HTTP API resolves moved annotation anchors without changing saved lines", 
     storageDir: join(dir, "store"),
     defaultDocumentPath: docPath,
     sessionId: null,
+    skillArgs: [],
     command: "review",
     waitForReview: false,
     jsonOutput: false,
@@ -103,21 +101,18 @@ test("HTTP API resolves moved annotation anchors without changing saved lines", 
   const server = createHttpServer(config, service, join(process.cwd(), "public"));
   t.after(() => server.close());
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.notEqual(address, null);
-  assert.notEqual(typeof address, "string");
-  const base = `http://127.0.0.1:${address.port}`;
+  const base = `http://127.0.0.1:${serverPort(server)}`;
 
   const saved = await json(`${base}/api/review`, {
     method: "POST",
     body: JSON.stringify({
       path: docPath,
+      baseRevision: 0,
       annotations: [{ lineStart: 3, lineEnd: 3, kind: "issue", severity: "major", note: "Track this" }],
     }),
     headers: { "content-type": "application/json" },
   });
   assert.equal(saved.annotations[0].anchorState, "ok");
-
   await writeFile(docPath, "# Demo\n\nOther\nCurrent replacement\nTarget text\n", "utf8");
   const moved = await json(`${base}/api/document?path=${encodeURIComponent(docPath)}`);
   assert.equal(moved.review.annotations[0].lineStart, 3);
@@ -127,11 +122,11 @@ test("HTTP API resolves moved annotation anchors without changing saved lines", 
   const driftedExport = await json(`${base}/api/export?path=${encodeURIComponent(docPath)}`);
   assert.match(driftedExport.markdown, /saved line 3 \(current line 5\)/);
   assert.match(driftedExport.markdown, /Anchor drift: saved text now appears at line 5/);
-
   const reanchored = await json(`${base}/api/review`, {
     method: "POST",
     body: JSON.stringify({
       path: docPath,
+      baseRevision: saved.revision,
       annotations: [{
         id: saved.annotations[0].id,
         lineStart: 4,
@@ -158,6 +153,7 @@ test("HTTP server rejects non-loopback Host and Origin headers", async (t) => {
     storageDir: join(dir, "store"),
     defaultDocumentPath: null,
     sessionId: null,
+    skillArgs: [],
     command: "review",
     waitForReview: false,
     jsonOutput: false,
@@ -168,22 +164,20 @@ test("HTTP server rejects non-loopback Host and Origin headers", async (t) => {
   const server = createHttpServer(config, service, join(process.cwd(), "public"));
   t.after(() => server.close());
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.notEqual(address, null);
-  assert.notEqual(typeof address, "string");
+  const port = serverPort(server);
 
-  const rejectedHost = await rawStatus(address.port, "/api/health", { Host: "evil.com" });
+  const rejectedHost = await rawStatus(port, "/api/health", { Host: "evil.com" });
   assert.equal(rejectedHost.status, 403);
 
-  const rejectedOrigin = await rawStatus(address.port, "/api/health", {
+  const rejectedOrigin = await rawStatus(port, "/api/health", {
     Origin: "http://evil.com",
-    Host: `127.0.0.1:${address.port}`,
+    Host: `127.0.0.1:${port}`,
   });
   assert.equal(rejectedOrigin.status, 403);
 
-  const accepted = await rawStatus(address.port, "/api/health", { Host: `127.0.0.1:${address.port}` });
+  const accepted = await rawStatus(port, "/api/health", { Host: `127.0.0.1:${port}` });
   assert.equal(accepted.status, 200);
-  assert.match(accepted.headers["content-security-policy"] ?? "", /default-src 'self'/);
+  assert.match(String(accepted.headers["content-security-policy"] ?? ""), /default-src 'self'/);
 });
 
 test("HTTP API finish resolves a waiting review session", async (t) => {
@@ -196,6 +190,7 @@ test("HTTP API finish resolves a waiting review session", async (t) => {
     storageDir: join(dir, "store"),
     defaultDocumentPath: docPath,
     sessionId: null,
+    skillArgs: [],
     command: "review",
     waitForReview: true,
     jsonOutput: false,
@@ -207,15 +202,13 @@ test("HTTP API finish resolves a waiting review session", async (t) => {
   const server = createHttpServer(config, service, join(process.cwd(), "public"), waiter);
   t.after(() => server.close());
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.notEqual(address, null);
-  assert.notEqual(typeof address, "string");
-  const base = `http://127.0.0.1:${address.port}`;
+  const base = `http://127.0.0.1:${serverPort(server)}`;
 
   await json(`${base}/api/review`, {
     method: "POST",
     body: JSON.stringify({
       path: docPath,
+      baseRevision: 0,
       annotations: [{ lineStart: 3, lineEnd: 3, kind: "issue", severity: "major", note: "Fix this" }],
     }),
     headers: { "content-type": "application/json" },
@@ -236,6 +229,12 @@ async function json(url: string, init?: RequestInit): Promise<any> {
   const data = await response.json();
   if (!response.ok) throw new Error(JSON.stringify(data));
   return data;
+}
+
+function serverPort(server: ReturnType<typeof createHttpServer>): number {
+  const address = server.address();
+  if (address == null || typeof address === "string") throw new Error("HTTP server has no TCP port");
+  return address.port;
 }
 
 async function rawStatus(port: number, path: string, headers: Record<string, string>) {
