@@ -21,7 +21,7 @@ test("shows per-annotation anchor state when API provides it", () => {
     />,
   )
 
-  expect(screen.getByText("anchor ok")).toBeInTheDocument()
+  expect(screen.queryByText("anchor ok")).not.toBeInTheDocument()
   expect(screen.getByText("moved to L8-9")).toBeInTheDocument()
   expect(screen.getByText("anchor ambiguous")).toBeInTheDocument()
   expect(screen.getByText("anchor not found")).toBeInTheDocument()
@@ -53,6 +53,8 @@ test("makes export warnings visible for drifted anchors", () => {
   )
 
   expect(screen.getByRole("alert")).toHaveTextContent("Review anchors before copying export: 1 moved.")
+  expect(screen.getByRole("region", { name: "Agent export Markdown" })).toHaveAttribute("tabindex", "0")
+  expect(screen.getByRole("heading", { name: "Agent handoff", level: 3 })).toBeInTheDocument()
 })
 
 test("keeps stale not-found notes in the main actionable list", () => {
@@ -100,9 +102,13 @@ test("separates resolved notes and exposes resolve and reopen actions", () => {
       onDelete={vi.fn()}
     />,
   )
-  expect(screen.getByText("Resolved Notes")).toBeInTheDocument()
+  expect(screen.getByText("Resolved")).toBeInTheDocument()
   fireEvent.click(screen.getByRole("button", { name: "Resolve" }))
   expect(onStatus).toHaveBeenCalledWith(expect.objectContaining({ id: "open" }), "resolved")
+  const resolvedGroup = screen.getByText("Resolved").closest("details")
+  expect(resolvedGroup).not.toHaveAttribute("open")
+  fireEvent.click(screen.getByText("Resolved"))
+  expect(resolvedGroup).toHaveAttribute("open")
   fireEvent.click(screen.getByRole("button", { name: "Reopen" }))
   expect(onStatus).toHaveBeenCalledWith(expect.objectContaining({ id: "done" }), "open")
 })

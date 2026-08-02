@@ -23,7 +23,7 @@ const chipClass: Record<ReviewSourceState, string> = {
 export function SourceStateBadge({ state }: SourceStateBadgeProps) {
   const Icon = stateIcon(state)
   return (
-    <Badge variant="outline" className={cn("capitalize", chipClass[state])}>
+    <Badge variant="outline" className={cn("h-5 gap-1 px-1.5 text-[10px] capitalize", chipClass[state])}>
       <Icon />
       {sourceStateLabel(state)}
     </Badge>
@@ -37,7 +37,7 @@ export function SourceStateBanner({ state, annotations = [] }: SourceStateBanner
   return (
     <div
       role={drift.total > 0 ? "alert" : "status"}
-      className={cn("rounded-lg border px-3 py-2 text-sm", bannerClass(state, drift.total > 0, drift.notFound + drift.ambiguous > 0))}
+      className={cn("border-l-2 px-3 py-2 text-sm", bannerClass(state, drift.total > 0, drift.notFound + drift.ambiguous > 0))}
     >
       {message}
     </div>

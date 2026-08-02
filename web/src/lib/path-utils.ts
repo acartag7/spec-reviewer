@@ -1,12 +1,3 @@
-export function pathCrumbs(path: string): string[] {
-  if (path.trim() === "") return ["No document"]
-  const compact = path.replace(/^\/Users\/[^/]+/, "~")
-  const parts = compact.split("/").filter(Boolean)
-  if (compact.startsWith("~/")) parts.unshift("~")
-  if (parts.length <= 5) return parts
-  return [parts[0] ?? "", "...", ...parts.slice(-4)].filter(Boolean)
-}
-
 export function fileName(path: string): string {
   const parts = path.split("/")
   return parts.at(-1) || path

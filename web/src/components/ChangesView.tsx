@@ -26,7 +26,7 @@ export function ChangesView({ comparison, document, selection, onSelect }: Chang
   return (
     <div
       ref={containerRef}
-      className="overflow-hidden rounded-lg border bg-card"
+      className="overflow-hidden border bg-card"
       role="region"
       aria-label={`Changes: ${comparison.added} added, ${comparison.removed} removed`}
       onMouseUp={() => {
@@ -144,7 +144,7 @@ function LineNumber({ value }: { value: number | null }) {
 }
 
 function EmptyChanges({ message }: { message: string }) {
-  return <div className="rounded-lg border bg-card px-5 py-10 text-center text-sm text-muted-foreground">{message}</div>
+  return <div className="border bg-card px-5 py-10 text-center text-sm text-muted-foreground">{message}</div>
 }
 
 function unavailableMessage(reason: Extract<ReviewComparison, { state: "unavailable" }>["reason"]): string {

@@ -20,7 +20,7 @@ export function ThemeToggle() {
     <Button
       type="button"
       variant="ghost"
-      size="icon"
+      size="icon-sm"
       aria-label={label}
       title={`${label} — click for ${nextLabel}`}
       onClick={() => setMode(next)}

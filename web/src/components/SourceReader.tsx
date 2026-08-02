@@ -19,7 +19,7 @@ export function SourceReader({ document, review, selection, onSelect }: SourceRe
   return (
     <div
       ref={containerRef}
-      className="overflow-hidden rounded-lg border bg-card"
+      className="font-mono"
       onMouseUp={() => {
         const next = selectionFromWindow(containerRef.current, document.lines)
         if (next == null) return
@@ -46,7 +46,7 @@ export function SourceReader({ document, review, selection, onSelect }: SourceRe
             data-source-end-line={line.number}
             tabIndex={0}
             className={cn(
-              "source-line min-h-7 border-b last:border-b-0 hover:bg-muted",
+              "source-line min-h-7 border-b border-border/60 last:border-b-0 hover:bg-muted/70",
               `kind-${line.kind}`,
               selected && "bg-accent",
               hasNote && "shadow-[inset_3px_0_0_var(--sev-major)]",
@@ -69,10 +69,10 @@ export function SourceReader({ document, review, selection, onSelect }: SourceRe
               <MessageSquarePlus className="size-4" />
             </button>
             <div
-              className="source-line-no bg-muted px-2 py-1.5 text-right font-mono text-xs text-muted-foreground/60"
+              className="source-line-no px-2 py-1.5 text-right text-xs text-muted-foreground/60"
               data-line-number={line.number}
             />
-            <div className="source-line-text px-3 py-1.5 font-mono text-[13px] leading-6">{line.text}</div>
+            <div className="source-line-text px-3 py-1.5 text-[13px] leading-6">{line.text}</div>
           </div>
         )
       })}

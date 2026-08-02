@@ -41,45 +41,45 @@ export function ReaderPane({ document, review, selection, sourceState, compariso
   }, [document.path, openRequest, view])
 
   return (
-    <section className="review-scroll min-h-0 overflow-auto p-5 lg:p-7">
-      <div className="mb-4 flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="truncate font-heading text-2xl font-semibold tracking-normal">{document.title}</h1>
-          <div className="truncate font-mono text-xs text-muted-foreground">{document.path}</div>
-        </div>
-        <div className="whitespace-pre-line text-right font-mono text-xs text-muted-foreground">
-          {document.lines.length} lines{"\n"}{openCount} open notes
-        </div>
-      </div>
-      <div className="mb-3">
-        <SourceStateBanner state={sourceState} annotations={review.annotations} />
-      </div>
-      <Tabs value={view} onValueChange={(value) => setView(value as ReaderView)}>
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <TabsList aria-label="Reader view">
+    <section className="flex min-h-0 flex-col overflow-hidden bg-card">
+      <Tabs value={view} onValueChange={(value) => setView(value as ReaderView)} className="min-h-0 gap-0 overflow-hidden">
+        <div className="flex h-9 shrink-0 items-center justify-between gap-3 border-b px-3">
+          <TabsList variant="line" aria-label="Reader view" className="h-8">
             <TabsTrigger value="rendered" onClick={() => setView("rendered")}>Rendered</TabsTrigger>
             <TabsTrigger value="source" onClick={() => setView("source")}>Source</TabsTrigger>
             <TabsTrigger value="changes" onClick={() => setView("changes")} aria-label={changesTabLabel(comparison)}>Changes</TabsTrigger>
           </TabsList>
-          {view !== "changes" && selection.lineStart > 0 && <div className="font-mono text-xs text-muted-foreground">
-            L{selection.lineStart}{selection.lineEnd !== selection.lineStart ? `-L${selection.lineEnd}` : ""}
-          </div>}
+          <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
+            <span>{document.lines.length} lines</span>
+            <span aria-hidden="true">·</span>
+            <span>{openCount} open</span>
+            {view !== "changes" && selection.lineStart > 0 ? (
+              <><span aria-hidden="true">·</span><span>L{selection.lineStart}{selection.lineEnd !== selection.lineStart ? `-L${selection.lineEnd}` : ""}</span></>
+            ) : null}
+          </div>
         </div>
-        <TabsContent value="rendered">
-          <RenderedMarkdown
-            document={document}
-            review={review}
-            comparison={comparison}
-            selection={selection}
-            onSelect={onSelect}
-          />
-        </TabsContent>
-        <TabsContent value="source">
-          <SourceReader document={document} review={review} selection={selection} onSelect={onSelect} />
-        </TabsContent>
-        <TabsContent value="changes">
-          <ChangesView comparison={comparison} document={document} selection={selection} onSelect={onSelect} />
-        </TabsContent>
+        <div className="review-scroll min-h-0 flex-1 overflow-auto overscroll-contain">
+          <div className="reader-alert mx-auto max-w-[56rem] px-[clamp(1.25rem,5vw,4rem)] pt-4">
+            <SourceStateBanner state={sourceState} annotations={review.annotations} />
+          </div>
+          <div className="reader-document mx-auto max-w-[56rem] px-[clamp(1.25rem,5vw,4rem)] pb-[clamp(5rem,14vh,8rem)] pt-5">
+            <TabsContent value="rendered">
+              <RenderedMarkdown
+                document={document}
+                review={review}
+                comparison={comparison}
+                selection={selection}
+                onSelect={onSelect}
+              />
+            </TabsContent>
+            <TabsContent value="source">
+              <SourceReader document={document} review={review} selection={selection} onSelect={onSelect} />
+            </TabsContent>
+            <TabsContent value="changes">
+              <ChangesView comparison={comparison} document={document} selection={selection} onSelect={onSelect} />
+            </TabsContent>
+          </div>
+        </div>
       </Tabs>
     </section>
   )

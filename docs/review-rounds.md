@@ -312,7 +312,11 @@ history that the application will never use.
     changed list item does not color its whole list, forged HTML provenance
     cannot create a marker or source anchor, and removed-only rows do not create
     a false current-source anchor.
-14. Regression tests fail when no-overwrite final-link commit, stable retry identity,
+14. During terminal completion, every path that can mutate the local review draft
+    is disabled or rejected until the response settles. This includes the
+    summary, annotation-editor controls such as resolved-note `Mark open` outside
+    the form fieldset, and reader selection from Rendered, Source, and Changes.
+15. Regression tests fail when no-overwrite final-link commit, stable retry identity,
     active-time confirmation, immutable collision checking, comparison degrade,
     or red/green row classification is reverted.
 
@@ -327,6 +331,13 @@ contract should have enumerated. Future Rendered provenance and durable-ordering
 work must specify flat, nested, raw-HTML, code-line, whitespace, navigation,
 restart, and clock-rollback behavior before implementation; review verifies
 those cases rather than introducing them round by round.
+
+The content-first UI port also exceeded three automated PR review rounds because
+its terminal-pending contract named editor fields without enumerating every draft
+mutation source across the workspace, including the resolved-note status control
+outside the form fieldset and reader selection in all three views. Future
+terminal-state changes must list every draft-mutating event source before
+implementation; review verifies that matrix rather than discovering it.
 
 ## Out of scope
 
