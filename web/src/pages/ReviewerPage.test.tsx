@@ -158,3 +158,67 @@ test("a rejected stale save reloads server state and allows the next save", asyn
   expect(screen.getByText("Fresh note")).toBeInTheDocument()
   expect(saveCalls).toBe(3)
 })
+
+test.each(["success", "failure"] as const)("a newer annotation draft survives a pending save %s", async (outcome) => {
+  const documentFixture = {
+    path: "/tmp/spec.md",
+    title: "Spec",
+    digest: "abc",
+    lines: [
+      { number: 1, text: "# Spec", kind: "heading", sectionTitle: "Spec" },
+      { number: 2, text: "", kind: "blank", sectionTitle: "Spec" },
+      { number: 3, text: "Target line", kind: "normal", sectionTitle: "Spec" },
+    ],
+    sections: [{ line: 1, level: 1, title: "Spec" }],
+  }
+  const review = {
+    documentPath: documentFixture.path,
+    documentDigest: documentFixture.digest,
+    revision: 0,
+    summary: "",
+    annotations: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    metrics: { activeMs: 0 },
+  }
+  let completeSave!: (response: Response) => void
+  const pendingSave = new Promise<Response>((resolve) => { completeSave = resolve })
+  let saveBody: { annotations: Array<Record<string, unknown>> } | null = null
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url === "/api/config") return json({ defaultDocumentPath: null, waitForReview: false })
+    if (url === "/api/reviews") return json([])
+    if (url.startsWith("/api/export?")) return json({ markdown: "# Agent Review Feedback" })
+    if (url.startsWith("/api/document?")) {
+      return json({ document: documentFixture, review, stale: false, sourceState: "current" })
+    }
+    if (url === "/api/review" && init?.method === "POST") {
+      saveBody = JSON.parse(init.body as string)
+      return pendingSave
+    }
+    return json({ error: { code: "not_found", message: "Not found" } }, 404)
+  })
+
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <TooltipProvider>
+        <MemoryRouter initialEntries={["/?path=/tmp/spec.md"]}><ReviewerPage /></MemoryRouter>
+      </TooltipProvider>
+    </QueryClientProvider>,
+  )
+  fireEvent.click(await screen.findByText("Target line"))
+  const feedback = screen.getByRole("textbox", { name: "Feedback" })
+  fireEvent.change(feedback, { target: { value: "Submitted note" } })
+  fireEvent.click(screen.getByRole("button", { name: "Add note" }))
+  await waitFor(() => expect(saveBody).not.toBeNull())
+  fireEvent.change(feedback, { target: { value: "New draft while saving" } })
+
+  await act(async () => {
+    completeSave(outcome === "success"
+      ? json({ ...review, revision: 1, annotations: saveBody?.annotations ?? [] })
+      : json({ error: { code: "review_conflict", message: "Review changed; reload before saving" } }, 409))
+  })
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(outcome === "success" ? "Saved" : "Reloaded the saved review"))
+  expect(feedback).toHaveValue("New draft while saving")
+})

@@ -72,10 +72,23 @@ test("all store read paths reject malformed JSON with a fixed filename-only erro
   await mkdir(reviewsDir, { recursive: true });
   await writeFile(join(reviewsDir, `${id}.json`), "{ malformed", "utf8");
 
-  for (const operation of [store.load(documentPath), store.loadById(id), store.listRecent(20)]) {
-    const error = await expectCode(operation, "review_store_corrupt");
+  const operations = [() => store.load(documentPath), () => store.loadById(id), () => store.listRecent(20)];
+  for (const operation of operations) {
+    const error = await expectCode(operation(), "review_store_corrupt");
     assert.deepEqual(error.details, { filename: `${id}.json` });
     assert.equal(error.message, "Stored review is malformed");
+  }
+});
+
+test("all store read paths preserve filesystem read failures", async () => {
+  const { storageDir, documentPath, store } = await fresh();
+  const id = pathKey(documentPath);
+  const reviewsDir = join(storageDir, "reviews");
+  await mkdir(join(reviewsDir, `${id}.json`), { recursive: true });
+
+  const operations = [() => store.load(documentPath), () => store.loadById(id), () => store.listRecent(20)];
+  for (const operation of operations) {
+    await assert.rejects(operation(), { code: "EISDIR" });
   }
 });
 
