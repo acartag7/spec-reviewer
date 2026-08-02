@@ -312,9 +312,10 @@ history that the application will never use.
     changed list item does not color its whole list, forged HTML provenance
     cannot create a marker or source anchor, and removed-only rows do not create
     a false current-source anchor.
-14. During terminal completion, the summary and every annotation-editor control
-    that can mutate the local draft are disabled until the response settles,
-    including the resolved-note `Mark open` control outside the form fieldset.
+14. During terminal completion, every path that can mutate the local review draft
+    is disabled or rejected until the response settles. This includes the
+    summary, annotation-editor controls such as resolved-note `Mark open` outside
+    the form fieldset, and reader selection from Rendered, Source, and Changes.
 15. Regression tests fail when no-overwrite final-link commit, stable retry identity,
     active-time confirmation, immutable collision checking, comparison degrade,
     or red/green row classification is reverted.
@@ -332,10 +333,11 @@ restart, and clock-rollback behavior before implementation; review verifies
 those cases rather than introducing them round by round.
 
 The content-first UI port also exceeded three automated PR review rounds because
-its terminal-pending contract named editor fields without enumerating the
-resolved-note status control outside the form fieldset. Future terminal-state
-changes must list every draft-mutating control inside and outside form boundaries
-before implementation; review verifies that matrix rather than discovering it.
+its terminal-pending contract named editor fields without enumerating every draft
+mutation source across the workspace, including the resolved-note status control
+outside the form fieldset and reader selection in all three views. Future
+terminal-state changes must list every draft-mutating event source before
+implementation; review verifies that matrix rather than discovering it.
 
 ## Out of scope
 

@@ -32,6 +32,7 @@ export function Workspace(props: WorkspaceProps) {
   const [openRequest, setOpenRequest] = useState<{ documentPath: string; line: number } | null>(null)
   const [selectionRequest, setSelectionRequest] = useState(0)
   const selectLines = (selection: SelectionRange) => {
+    if (props.terminalPending) return
     props.onSelection(selection)
     setSelectionRequest((request) => request + 1)
   }
