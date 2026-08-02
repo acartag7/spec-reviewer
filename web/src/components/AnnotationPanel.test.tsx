@@ -65,9 +65,16 @@ test("reopens a resolved note from the editor", () => {
   const selection: SelectionRange = { lineStart: 1, lineEnd: 1, selectedText: "" }
   const form = { ...emptyForm(selection), id: "saved", createdAt: "t", status: "resolved" as const }
   const onChange = vi.fn()
-  render(<AnnotationPanel form={form} selection={selection} maxLine={2} saving={false} onChange={onChange} onSubmit={vi.fn()} onReset={vi.fn()} />)
+  const props = { form, selection, maxLine: 2, saving: false, onChange, onSubmit: vi.fn(), onReset: vi.fn() }
+  const { rerender } = render(<AnnotationPanel {...props} />)
   fireEvent.click(screen.getByRole("button", { name: "Mark open" }))
   expect(onChange).toHaveBeenCalledWith({ ...form, status: "open" })
+
+  onChange.mockClear()
+  rerender(<AnnotationPanel {...props} locked />)
+  expect(screen.getByRole("button", { name: "Mark open" })).toBeDisabled()
+  fireEvent.click(screen.getByRole("button", { name: "Mark open" }))
+  expect(onChange).not.toHaveBeenCalled()
 })
 
 test("explains the empty initial target and an empty document", () => {

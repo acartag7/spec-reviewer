@@ -62,7 +62,7 @@ export function AnnotationPanel({
       {form.status === "resolved" ? (
         <div className="flex items-center justify-between gap-3 border-l-2 border-ok bg-accent/50 p-2.5 text-xs">
           <span>Resolved note</span>
-          <Button type="button" size="sm" variant="outline" onClick={() => onChange({ ...form, status: "open" })}>
+          <Button type="button" size="sm" variant="outline" disabled={locked} onClick={() => onChange({ ...form, status: "open" })}>
             <RotateCcw /> Mark open
           </Button>
         </div>
