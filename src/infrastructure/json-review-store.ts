@@ -87,13 +87,13 @@ export class JsonReviewStore implements ReviewStore {
   }
 
   private async readStored(entry: string, expectedPath?: string): Promise<Review> {
+    const raw = await readFile(join(this.reviewDir(), entry));
     let value: unknown;
     try {
-      const raw = await readFile(join(this.reviewDir(), entry));
       if (raw.byteLength > MAX_STORED_REVIEW_BYTES) throw corruptReview(entry);
       value = JSON.parse(raw.toString("utf8"));
     } catch (error) {
-      if (isErrno(error, "ENOENT")) throw error;
+      if (error instanceof AppError) throw error;
       throw corruptReview(entry);
     }
     let review: Review;

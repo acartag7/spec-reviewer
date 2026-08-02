@@ -8,16 +8,18 @@ import { SessionOutcomeScreen } from "@/components/SessionOutcomeScreen"
 import { StatusToast } from "@/components/StatusToast"
 import { TopBar } from "@/components/TopBar"
 import { Workspace } from "@/components/Workspace"
-import { createAnnotation, emptyForm, formFromAnnotation, removeAnnotation, upsertAnnotation, type AnnotationFormValue } from "@/lib/review-utils"
+import { createAnnotation, formFromAnnotation, removeAnnotation, upsertAnnotation } from "@/lib/review-utils"
+import type { AnnotationFormValue } from "@/lib/review-utils"
 import { isMarkdownFile } from "@/lib/path-utils"
 import { scrollToLine } from "@/lib/scroll-to-line"
 import { NO_SELECTION } from "@/lib/selection-utils"
 import { recoverFailedSave } from "@/lib/save-recovery"
 import { routeTerminalActiveTime, sessionOutcomeFor, type SessionOutcome } from "@/lib/terminal-active-time"
 import { useActiveReviewTime } from "@/lib/use-active-review-time"
+import { useReviewDraft } from "@/lib/use-review-draft"
 
 const initialSelection: SelectionRange = { lineStart: 1, lineEnd: 1, selectedText: "" }
-type SaveIntent = { review: Review; formOnFailure: AnnotationFormValue; selectionOnFailure: SelectionRange; clearFormOnSuccess: boolean }
+type SaveIntent = { review: Review; submittedForm: AnnotationFormValue; submittedSelection: SelectionRange; clearFormOnSuccess: boolean }
 export function ReviewerPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
@@ -26,8 +28,7 @@ export function ReviewerPage() {
   const requestedPath = searchParams.get("path") ?? ""
   const [document, setDocument] = useState<ReviewDocument | null>(null)
   const [review, setReview] = useState<Review | null>(null)
-  const [selection, setSelection] = useState<SelectionRange>(NO_SELECTION)
-  const [form, setForm] = useState<AnnotationFormValue>(() => emptyForm(initialSelection))
+  const { selection, selectionRef, form, formRef, updateForm, resetDraft, selectLines, clearSubmittedForm } = useReviewDraft(NO_SELECTION, initialSelection)
   const [sourceState, setSourceState] = useState<ReviewSourceState>("unreviewed")
   const [comparison, setComparison] = useState<ReviewComparison>({ state: "unavailable", reason: "no-baseline" })
   const [status, setStatus] = useState("")
@@ -53,15 +54,14 @@ export function ReviewerPage() {
     queryFn: () => api.exportReview(document?.path ?? ""),
     enabled: document != null,
   })
-  const applyOpenResult = useCallback((result: OpenDocumentResult) => {
+  const applyOpenResult = useCallback((result: OpenDocumentResult, shouldResetDraft = true) => {
     setDocument(result.document)
     setReview(result.review)
     confirmedReviewRef.current = result.review
-    setSelection(NO_SELECTION)
-    setForm(emptyForm(initialSelection))
+    if (shouldResetDraft) resetDraft(NO_SELECTION, initialSelection)
     setSourceState(result.sourceState ?? (result.stale ? "changed" : "current"))
     setComparison(result.comparison ?? { state: "unavailable", reason: "no-baseline" })
-  }, [])
+  }, [resetDraft])
   useEffect(() => {
     if (requestedPath === "" && configQuery.data?.defaultDocumentPath) {
       setSearchParams({ path: configQuery.data.defaultDocumentPath }, { replace: true })
@@ -91,16 +91,19 @@ export function ReviewerPage() {
     onSuccess: (saved, intent) => {
       setReview(saved)
       confirmedReviewRef.current = saved
-      if (intent.clearFormOnSuccess) setForm(emptyForm(selection))
+      if (intent.clearFormOnSuccess) clearSubmittedForm(intent.submittedForm, intent.submittedSelection)
       setSourceState((state) => (state === "changed" ? "changed" : "current"))
       void queryClient.invalidateQueries({ queryKey: ["reviews"] })
       void queryClient.invalidateQueries({ queryKey: ["export", document?.path] })
       showStatus("Saved")
     },
-    onError: async (error, intent) => {
-      const reloaded = await recoverFailedSave(document?.path ?? null, confirmedReviewRef.current, setReview, applyOpenResult)
-      setForm(intent.formOnFailure)
-      setSelection(intent.selectionOnFailure)
+    onError: async (error) => {
+      const reloaded = await recoverFailedSave(
+        document?.path ?? null,
+        confirmedReviewRef.current,
+        setReview,
+        (result) => applyOpenResult(result, false),
+      )
       if (reloaded && document != null) void queryClient.invalidateQueries({ queryKey: ["export", document.path] })
       const message = error instanceof Error ? error.message : String(error)
       showStatus(`${message}. ${reloaded ? "Reloaded the saved review" : "Unsaved change reverted; reload before saving again"}`)
@@ -146,19 +149,14 @@ export function ReviewerPage() {
     setSearchParams({ path: path.trim() }, { replace: true })
   }
 
-  function selectLines(nextSelection: SelectionRange) {
-    setSelection(nextSelection)
-    setForm((current) => ({
-      ...current,
-      lineStart: nextSelection.lineStart,
-      lineEnd: nextSelection.lineEnd,
-      selectedText: nextSelection.selectedText,
-    }))
-  }
-
   function saveReview(nextReview: Review, clearFormOnSuccess = false) {
     setReview(nextReview)
-    saveMutation.mutate({ review: nextReview, formOnFailure: form, selectionOnFailure: selection, clearFormOnSuccess })
+    saveMutation.mutate({
+      review: nextReview,
+      submittedForm: formRef.current,
+      submittedSelection: selectionRef.current,
+      clearFormOnSuccess,
+    })
   }
 
   function addOrUpdateAnnotation() {
@@ -224,11 +222,11 @@ export function ReviewerPage() {
           exportLoading={exportQuery.isLoading || exportQuery.isFetching}
           saving={saveMutation.isPending}
           onSelection={selectLines}
-          onFormChange={setForm}
+          onFormChange={updateForm}
           onFormSubmit={addOrUpdateAnnotation}
-          onFormReset={() => { window.getSelection()?.removeAllRanges(); setSelection(NO_SELECTION); setForm(emptyForm(initialSelection)) }}
+          onFormReset={() => { window.getSelection()?.removeAllRanges(); resetDraft(NO_SELECTION, initialSelection) }}
           onOpenAnnotation={(annotation) => scrollToLine(annotation.lineStart)}
-          onEditAnnotation={(annotation) => setForm(formFromAnnotation(annotation))}
+          onEditAnnotation={(annotation) => updateForm(formFromAnnotation(annotation))}
           onStatusAnnotation={setAnnotationStatus}
           onDeleteAnnotation={deleteAnnotation}
           onCopyExport={copyExport}
