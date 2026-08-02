@@ -107,6 +107,33 @@ test("separates resolved notes and exposes resolve and reopen actions", () => {
   expect(onStatus).toHaveBeenCalledWith(expect.objectContaining({ id: "done" }), "open")
 })
 
+test("blocks revisioned note mutations while a save is pending", () => {
+  const onOpen = vi.fn()
+  const onEdit = vi.fn()
+  const onStatus = vi.fn()
+  const onDelete = vi.fn()
+  render(
+    <AnnotationList
+      annotations={[annotation({ id: "pending", note: "Pending note" })]}
+      saving
+      onOpen={onOpen}
+      onEdit={onEdit}
+      onStatus={onStatus}
+      onDelete={onDelete}
+    />,
+  )
+
+  expect(screen.getByRole("button", { name: "Resolve" })).toBeDisabled()
+  expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled()
+  expect(screen.getByRole("button", { name: "Edit" })).toBeEnabled()
+  fireEvent.click(screen.getByText("Pending note"))
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+  expect(onOpen).toHaveBeenCalledTimes(1)
+  expect(onEdit).toHaveBeenCalledTimes(1)
+  expect(onStatus).not.toHaveBeenCalled()
+  expect(onDelete).not.toHaveBeenCalled()
+})
+
 function annotation(overrides: Partial<Annotation> = {}): Annotation {
   return {
     id: "a1",

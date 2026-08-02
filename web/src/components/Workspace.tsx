@@ -47,6 +47,7 @@ export function Workspace(props: WorkspaceProps) {
         <div className="border-t" />
         <AnnotationList
           annotations={props.review.annotations}
+          saving={props.saving}
           onOpen={props.onOpenAnnotation}
           onEdit={props.onEditAnnotation}
           onStatus={props.onStatusAnnotation}
