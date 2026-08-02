@@ -13,13 +13,14 @@ import { cn } from "@/lib/utils"
 
 interface AnnotationListProps {
   annotations: Annotation[]
+  saving?: boolean
   onOpen: (annotation: Annotation) => void
   onEdit: (annotation: Annotation) => void
   onStatus: (annotation: Annotation, status: Annotation["status"]) => void
   onDelete: (annotation: Annotation) => void
 }
 
-export function AnnotationList({ annotations, onOpen, onEdit, onStatus, onDelete }: AnnotationListProps) {
+export function AnnotationList({ annotations, saving = false, onOpen, onEdit, onStatus, onDelete }: AnnotationListProps) {
   const current = sortAnnotations(annotations)
   const open = current.filter((annotation) => annotation.status === "open")
   const resolved = current.filter((annotation) => annotation.status === "resolved")
@@ -34,6 +35,7 @@ export function AnnotationList({ annotations, onOpen, onEdit, onStatus, onDelete
             <NoteCard
               key={annotation.id}
               annotation={annotation}
+              saving={saving}
               onOpen={onOpen}
               onEdit={onEdit}
               onStatus={onStatus}
@@ -47,7 +49,7 @@ export function AnnotationList({ annotations, onOpen, onEdit, onStatus, onDelete
           <div className="mt-2 font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground">Resolved Notes</div>
           <div className="grid gap-2">
             {resolved.map((annotation) => (
-              <NoteCard key={annotation.id} annotation={annotation} onOpen={onOpen} onEdit={onEdit} onStatus={onStatus} onDelete={onDelete} />
+              <NoteCard key={annotation.id} annotation={annotation} saving={saving} onOpen={onOpen} onEdit={onEdit} onStatus={onStatus} onDelete={onDelete} />
             ))}
           </div>
         </>
@@ -58,13 +60,14 @@ export function AnnotationList({ annotations, onOpen, onEdit, onStatus, onDelete
 
 interface NoteCardProps {
   annotation: Annotation
+  saving: boolean
   onOpen: (annotation: Annotation) => void
   onEdit: (annotation: Annotation) => void
   onStatus: (annotation: Annotation, status: Annotation["status"]) => void
   onDelete: (annotation: Annotation) => void
 }
 
-function NoteCard({ annotation, onOpen, onEdit, onStatus, onDelete }: NoteCardProps) {
+function NoteCard({ annotation, saving, onOpen, onEdit, onStatus, onDelete }: NoteCardProps) {
   const resolved = annotation.status === "resolved"
   return (
     <article
@@ -83,6 +86,7 @@ function NoteCard({ annotation, onOpen, onEdit, onStatus, onDelete }: NoteCardPr
           type="button"
           variant="ghost"
           size="sm"
+          disabled={saving}
           onClick={(event) => {
             event.stopPropagation()
             onStatus(annotation, resolved ? "open" : "resolved")
@@ -108,6 +112,7 @@ function NoteCard({ annotation, onOpen, onEdit, onStatus, onDelete }: NoteCardPr
           variant="ghost"
           size="sm"
           className="text-destructive hover:text-destructive"
+          disabled={saving}
           onClick={(event) => {
             event.stopPropagation()
             onDelete(annotation)

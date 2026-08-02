@@ -51,6 +51,7 @@ export function Workspace(props: WorkspaceProps) {
         <div className="border-t" />
         <AnnotationList
           annotations={props.review.annotations}
+          saving={props.saving}
           onOpen={(annotation) => setOpenRequest({
             documentPath: props.document.path,
             line: annotation.anchor?.state === "moved" ? annotation.anchor.lineStart ?? annotation.lineStart : annotation.lineStart,
