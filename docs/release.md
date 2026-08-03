@@ -23,9 +23,12 @@ pnpm run release:artifacts
 Build all release targets:
 
 ```bash
-pnpm run release:artifacts:all -- --version 0.1.0
+pnpm run release:artifacts:all
 pnpm run homebrew:smoke
 ```
+
+Artifact versions always come from `package.json`. The release workflow rejects
+a tag that does not match that version.
 
 Artifacts are written to `artifacts/`:
 
@@ -53,6 +56,10 @@ compatibility.
 
 The release workflow runs on `v*` tags:
 
+1. Bump `package.json` to the release version.
+2. Add hand-written notes at `docs/releases/v<version>.md`.
+3. Merge that release-prep change before tagging.
+
 ```bash
 git tag v0.1.0
 git push origin v0.1.0
@@ -64,8 +71,9 @@ The workflow:
 2. Runs `pnpm run check`.
 3. Builds all release artifacts.
 4. Smokes the native Linux x64 artifact.
-5. Creates or updates the GitHub release with tarballs, `SHA256SUMS`, and the
-   generated Homebrew formula.
+5. Creates or updates the GitHub release from `docs/releases/<tag>.md`, with
+   tarballs, `SHA256SUMS`, and the generated Homebrew formula. Existing legacy
+   releases without a notes file can be republished with their existing notes.
 
 ## Homebrew Tap
 
@@ -99,6 +107,8 @@ HOMEBREW_TAP_TOKEN=... pnpm run tap:update
 The release workflow also runs `tap:update` when the `HOMEBREW_TAP_TOKEN`
 secret is configured. Without that secret, the workflow still publishes the
 formula as a release asset and skips pushing to the tap.
+The tap updater rejects a formula version older than the one already published;
+release re-runs skip that tap update successfully.
 
 ## Skill Installer
 

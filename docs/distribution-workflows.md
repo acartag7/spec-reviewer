@@ -206,7 +206,7 @@ Release commands:
 
 ```bash
 pnpm run release:artifacts
-pnpm run release:artifacts:all -- --version 0.1.0
+pnpm run release:artifacts:all
 pnpm run homebrew:smoke
 ```
 
