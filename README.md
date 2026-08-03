@@ -24,13 +24,20 @@ spec-reviewer review path/to/spec.md --wait --json
 `--wait` keeps the command open until the human clicks Finish Review or Cancel.
 On finish, the command prints Markdown feedback for the agent to apply.
 
+In the app, **Handoff & copy** saves an immutable checkpoint for a local source
+file before it writes feedback to the clipboard. After the agent edits the file,
+reopening the review shows changes against that exact handoff. Dropped uploads
+remain immutable and do not create a comparison baseline.
+
 ## What It Does
 
 - Opens local `.md` and `.markdown` files.
 - Lets you review rendered Markdown or source lines.
+- Keeps Markdown tables readable and renders Mermaid diagrams as sanitized static SVG.
 - Shows completed-round changes as a bounded unified red/green diff.
 - Adds line, block, or selected-text notes.
-- Tracks whether saved anchors are current, moved, or missing after edits.
+- Saves an immutable checkpoint for a local source file before feedback is copied to an agent.
+- Tracks per-note anchors as `ok`, `moved`, `ambiguous`, or `not-found` after edits.
 - Reopens previous reviews from local state.
 - Exports agent-ready Markdown feedback grouped by severity.
 - Runs loopback-only from a bundled binary.
@@ -45,6 +52,8 @@ spec-reviewer skill print --target codex
 
 Skill install backs up existing files before overwriting. User scope writes to
 the agent's home skills directory; project scope writes under the current repo.
+The bundled skill teaches the Finish/Cancel workflow, durable handoff baselines,
+and manual confirmation for moved or missing anchors.
 
 ## Development Requirements
 
@@ -105,7 +114,8 @@ pnpm run build:binary
 
 - Saved reviews live under `~/.spec-reviewer/reviews`.
 - Dropped files are copied under `~/.spec-reviewer/documents`.
-- Completed waiting-session rounds live under `~/.spec-reviewer/rounds`.
+- Immutable Handoff & copy and completed waiting-session checkpoints live under
+  `~/.spec-reviewer/rounds`.
 - Reviewed source files are not modified.
 - No telemetry is sent.
 
