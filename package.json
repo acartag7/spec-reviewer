@@ -1,6 +1,6 @@
 {
   "name": "spec-reviewer",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Local-first Markdown spec reviewer for source-anchored agent feedback.",
   "license": "MIT",
   "type": "module",
