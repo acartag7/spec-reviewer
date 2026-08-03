@@ -8,7 +8,11 @@ import { spawnSync } from "node:child_process";
 const root = resolve(new URL("..", import.meta.url).pathname);
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const options = parseArgs(process.argv.slice(2));
-const version = options.version ?? pkg.version;
+const requestedVersion = options.version?.replace(/^v/, "");
+if (requestedVersion != null && requestedVersion !== pkg.version) {
+  throw new Error(`Release version ${options.version} must match package.json version ${pkg.version}`);
+}
+const version = pkg.version;
 const tag = version.startsWith("v") ? version : `v${version}`;
 const targets = options.targets.length > 0 ? options.targets : [hostTarget()];
 const artifactsDir = resolve(root, options.outDir);
