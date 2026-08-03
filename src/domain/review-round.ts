@@ -3,10 +3,12 @@ import type { Annotation, Review } from "./review.ts";
 export const MAX_ROUNDS_PER_DOCUMENT = 100;
 export const MAX_STORED_ROUND_BYTES = 32 * 1024 * 1024;
 export const ROUND_ID_PATTERN = /^(\d{13})-([a-f0-9]{32})$/;
+export type ReviewCheckpointTrigger = "handoff" | "finish";
 
 export interface ReviewRound {
-  schemaVersion: 1;
+  schemaVersion: 2;
   id: string;
+  trigger: ReviewCheckpointTrigger;
   documentPath: string;
   documentDigest: string;
   reviewDigest: string;
@@ -21,6 +23,7 @@ export interface ReviewRound {
 export interface RoundIdentity {
   id: string;
   completedAt: string;
+  trigger?: ReviewCheckpointTrigger;
 }
 
 export type RoundBaseline =
@@ -35,8 +38,9 @@ export function createReviewRound(
   review: Review,
 ): ReviewRound {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: identity.id,
+    trigger: identity.trigger ?? "finish",
     documentPath: review.documentPath,
     documentDigest: sourceDigest,
     reviewDigest: review.documentDigest,

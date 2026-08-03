@@ -37,6 +37,7 @@ export function renderMarkdownBlockHtml(
   const clean = sanitizeHtml(dirty, { html: true })
   const template = document.createElement("template")
   template.innerHTML = clean
+  wrapTables(template.content)
   applyListAnchors(template.content, block.anchors.filter((anchor) => anchor.kind === "list-item"))
   applyCodeLineAnchors(template.content, block.anchors.filter((anchor) => anchor.kind === "code-line"))
   const markedChangedLines = applyChangeMarkers(template.content, changedLines)
@@ -96,6 +97,15 @@ function setSourceAnchor(element: HTMLElement, anchor: SourceAnchor) {
   element.dataset.sourceEndLine = String(anchor.lineEnd)
 }
 
+function wrapTables(root: DocumentFragment) {
+  for (const table of root.querySelectorAll("table")) {
+    const wrapper = document.createElement("div")
+    wrapper.className = "markdown-table-wrap"
+    table.replaceWith(wrapper)
+    wrapper.append(table)
+  }
+}
+
 function overlapsChangedLine(lines: ReadonlySet<number>, start: number, end: number): boolean {
   for (let line = start; line <= end; line += 1) if (lines.has(line)) return true
   return false
@@ -106,6 +116,10 @@ function sanitizeArtifact(source: string, kind: ArtifactHtml["kind"]): string {
     return sanitizeHtml(source, { svg: true, svgFilters: true })
   }
   return sanitizeHtml(source, { html: true })
+}
+
+export function sanitizeMermaidSvg(source: string): string {
+  return sanitizeHtml(source, { svg: true, svgFilters: true })
 }
 
 function sanitizeHtml(source: string, profile: { html?: boolean; svg?: boolean; svgFilters?: boolean }): string {

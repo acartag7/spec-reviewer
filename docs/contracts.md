@@ -264,14 +264,15 @@ replacement races after directory verification are also out of scope.
 
 ## Immutable Review Rounds
 
-Successful waiting-session finishes are stored under
+Successful waiting-session finishes and feedback handoffs are stored under
 `rounds/<path-key>/<epoch-ms>-<random-id>.json`. The storage-root leaf, `rounds`,
 and path-key directory must each be real directories, never symlinks. Reads do
 not alter their modes. Before a round write, existing real components are
 tightened to `0700` and missing components are created as `0700`. Existing
 ancestors above the configured root are an operator precondition. A per-document
-exclusive Finish lock serializes cross-process round publication and the
-100-round cap. Stale locks fail closed and require local operator cleanup.
+exclusive round lock serializes cross-process publication. Handoffs stop at 99
+rounds to reserve the 100th for terminal Finish; Finish stops at 100. Stale locks
+fail closed and require local operator cleanup.
 
 Round content is validated before filesystem changes and capped at 32 MiB. The
 writer syncs an exclusive `0600` temporary file, hard-links it to the final name
@@ -283,7 +284,7 @@ are never read as evidence.
 The latest allowlisted filename is the only baseline read on open. Its schema,
 path, filename, timestamp, digest/content binding, annotations, size, and private
 file mode are validated. Read failure disables only the comparison. New Finish
-writes still fail closed on unsafe storage or corrupt collisions.
+and handoff writes still fail closed on unsafe storage or corrupt collisions.
 
 This integrity contract does not add review outcome taxonomy, automatic port
 selection, installed-version reporting, pruning, or history recovery UI.

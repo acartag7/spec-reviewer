@@ -3,7 +3,7 @@ import type { AppConfig } from "../../config.ts";
 import { AppError } from "../../domain/errors.ts";
 import type { ReviewSessionWaiter } from "../../application/review-session.ts";
 import type { ReviewerService } from "../../application/reviewer-service.ts";
-import { readActiveTime, readReviewDraft, readSessionAction } from "./actions.ts";
+import { readActiveTime, readHandoffAction, readReviewDraft, readSessionAction } from "./actions.ts";
 import { readJson, sendError, sendJson } from "./json.ts";
 import { rejectUnsafeRequest } from "./security.ts";
 import { serveStatic } from "./static.ts";
@@ -73,6 +73,11 @@ async function routeApi(
   }
   if (req.method === "GET" && url.pathname === "/api/export") {
     sendJson(res, 200, await service.exportReview(requirePath(url)));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/review/handoff") {
+    const action = readHandoffAction(await readJson(req));
+    sendJson(res, 200, await service.handoffReview(action.path, action));
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/active-time") {

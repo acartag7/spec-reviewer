@@ -36,7 +36,7 @@ export function TopBar({ path, sourceState, canCopy, canFinish, waitForReview, f
         <div className="hidden lg:block"><SourceStateBadge state={sourceState} /></div>
         <span className="hidden text-[11px] text-muted-foreground md:inline">{openNotes} open</span>
         <ThemeToggle />
-        <Button type="button" size="icon-sm" variant="ghost" aria-label="Copy feedback" title="Copy feedback" onClick={onCopy} disabled={!canCopy}>
+        <Button type="button" size="icon-sm" variant="ghost" aria-label="Copy feedback" title="Handoff and copy feedback" onClick={onCopy} disabled={!canCopy}>
           <Copy />
         </Button>
         {waitForReview ? (

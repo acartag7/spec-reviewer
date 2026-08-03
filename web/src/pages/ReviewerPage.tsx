@@ -16,6 +16,7 @@ import { recoverFailedSave } from "@/lib/save-recovery"
 import { useActiveReviewTime } from "@/lib/use-active-review-time"
 import { useReviewDraft } from "@/lib/use-review-draft"
 import { useReviewSummary } from "@/lib/use-review-summary"
+import { useReviewHandoff } from "@/lib/use-review-handoff"
 import { useTerminalReview } from "@/lib/use-terminal-review"
 
 const initialSelection: SelectionRange = { lineStart: 1, lineEnd: 1, selectedText: "" }
@@ -183,22 +184,13 @@ export function ReviewerPage() {
   }
 
   const hasUnsavedWork = (review != null && hasAnnotationDraft(form, review.annotations)) || (review != null && summary !== review.summary)
-  async function copyExport() {
-    if (document == null) return showStatus("Open a document first")
-    if (saveInFlightRef.current || terminal.isInFlight()) return showStatus("Wait for the pending operation")
-    if (hasUnsavedWork) return showStatus("Save or clear your draft before copying feedback")
-    const result = await exportQuery.refetch()
-    const markdown = result.data?.markdown ?? exportQuery.data?.markdown ?? ""
-    try {
-      await navigator.clipboard.writeText(markdown)
-      showStatus("Feedback copied")
-    } catch {
-      showStatus("Feedback ready below")
-    }
-  }
+  const handoff = useReviewHandoff({
+    document, review, hasUnsavedWork, operationInFlightRef: saveInFlightRef,
+    terminalInFlight: terminal.isInFlight, applyOpenResult, showStatus,
+  })
 
   const saving = saveMutation.isPending
-  const reviewLocked = saving || terminal.pending
+  const reviewLocked = saving || terminal.pending || handoff.pending
   const canCopy = document != null && !reviewLocked
   const sessionPath = configQuery.data?.defaultDocumentPath ?? null
   const canFinish = document != null && document.path === sessionPath && !reviewLocked
@@ -214,7 +206,7 @@ export function ReviewerPage() {
         waitForReview={configQuery.data?.waitForReview ?? false}
         finishing={reviewLocked}
         openNotes={review?.annotations.filter((item) => item.status === "open").length ?? 0}
-        onCopy={copyExport} onFinish={finishReview} onCancel={terminal.cancel}
+        onCopy={handoff.handoffAndCopy} onFinish={finishReview} onCancel={terminal.cancel}
       />
       {document != null && review != null ? (
         <Workspace
@@ -233,7 +225,7 @@ export function ReviewerPage() {
           onEditAnnotation={(annotation) => updateForm(formFromAnnotation(annotation))}
           onStatusAnnotation={setAnnotationStatus}
           onDeleteAnnotation={deleteAnnotation}
-          onCopyExport={copyExport}
+          onCopyExport={handoff.handoffAndCopy}
         />
       ) : (
         <StartScreen

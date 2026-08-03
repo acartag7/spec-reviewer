@@ -61,8 +61,8 @@ export class JsonReviewRoundStore implements ReviewRoundStore {
         committed = true;
         return afterLock;
       }
-      if (names.length >= MAX_ROUNDS_PER_DOCUMENT) {
-        throw new AppError("round_limit_reached", 409, "Review round limit reached; remove local history before retrying");
+      if (names.length >= roundLimit(requested.trigger)) {
+        throw roundLimitReached(requested.trigger);
       }
       const round = monotonicRound(requested, names);
       const content = `${JSON.stringify(round, null, 2)}\n`;
@@ -138,6 +138,21 @@ function monotonicRound(round: ReviewRound, names: string[]): ReviewRound {
   });
 }
 
+function roundLimit(trigger: ReviewRound["trigger"]): number {
+  return trigger === "handoff" ? MAX_ROUNDS_PER_DOCUMENT - 1 : MAX_ROUNDS_PER_DOCUMENT;
+}
+
+function roundLimitReached(trigger: ReviewRound["trigger"]): AppError {
+  if (trigger === "handoff") {
+    return new AppError(
+      "round_limit_reached",
+      409,
+      "Review history reserves one slot for Finish; finish this review before copying feedback",
+    );
+  }
+  return new AppError("round_limit_reached", 409, "Review round limit reached; remove local history before retrying");
+}
+
 async function assertRealDirectoryPath(path: string): Promise<void> {
   const info = await lstat(path);
   if (info.isSymbolicLink() || !info.isDirectory()) {
@@ -194,7 +209,7 @@ async function acquireFinishLock(directory: string): Promise<(committed: boolean
       throw new AppError(
         "round_store_busy",
         409,
-        "Another Finish may be active; if none is running, stop Spec Reviewer, remove the local .finish.lock file, and retry",
+        "Another review checkpoint may be active; if none is running, stop Spec Reviewer, remove the local .finish.lock file, and retry",
       );
     }
     if (created) {

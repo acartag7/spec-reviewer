@@ -33,13 +33,19 @@ baseline from the current file.
 
 ## What creates a review round
 
-A round is recorded only when a waiting review session successfully finishes.
-Adding or editing a note, opening a document, refreshing the browser, and
-canceling a session do not create rounds.
+A round is recorded when a waiting review session successfully finishes or when
+the reviewer copies feedback for an agent handoff. Adding or editing a note,
+opening a document, refreshing the browser, and canceling a session do not
+create rounds.
 
 Finish records the exact source and review state that the human submitted. The
 next waiting session compares its live source with the latest completed round.
 Finishing an unchanged source is still a distinct run and is recorded.
+
+Copying feedback creates an immutable `handoff` checkpoint with the exact
+source and saved review state used for the export. Retries with the same key
+return that checkpoint; they do not create another round. A handoff may use at
+most round 99, reserving round 100 for the waiting session's terminal Finish.
 
 Existing review records have no historical source snapshot. Their first
 post-upgrade finish creates the first round. Until then, the Changes tab shows
@@ -61,12 +67,13 @@ filenames selects the latest completed round without reading every source
 snapshot. If the newest final file is unavailable or corrupt, the server does
 not fall back to an older baseline and pretend it is current.
 
-Round schema version 1 contains:
+Round schema version 2 contains:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "completed-epoch-ms-random-id",
+  "trigger": "finish",
   "documentPath": "/canonical/spec.md",
   "documentDigest": "sha256",
   "reviewDigest": "sha256 of the source against which notes were saved",
@@ -78,6 +85,8 @@ Round schema version 1 contains:
   "completedAt": "2026-08-02T12:00:00.000Z"
 }
 ```
+
+Version 1 rounds remain readable and are treated as `finish` rounds.
 
 `activeMs` is the cumulative active-review time stored on the active review at
 completion. It is not a per-round duration and must not be summed across rounds.
@@ -98,7 +107,9 @@ payload under the same attempt identity.
 
 ## Commit protocol
 
-Finish uses the existing canonical-path operation lock.
+Finish uses the existing canonical-path operation lock. Copy feedback uses the
+same immutable store, but does not persist terminal active time and cannot use
+the final round slot reserved for Finish.
 
 1. Read and validate the current source and active review.
 2. Apply and durably save the terminal active-time delta to the active review.
@@ -132,8 +143,10 @@ closed as corruption.
 - One serialized round file is at most 32 MiB. This accommodates the existing
   16 MiB active-review ceiling plus worst-case JSON escaping of a 2 MiB source.
 - One document path may have at most 100 completed rounds.
-- Reaching a limit fails Finish with a typed fixed error and leaves the waiting
-  session open. No old evidence is silently evicted.
+- At 99 stored rounds, a new feedback handoff fails with a typed fixed error so
+  the waiting session can still Finish and store round 100. At 100 rounds,
+  Finish fails with a typed fixed error and leaves the waiting session open. No
+  old evidence is silently evicted.
 - The storage-root leaf, `rounds`, and path-key children are checked one
   component at a time as real directories, never symlinks. Read paths do not
   change their modes. Before a round write, existing real components are
@@ -157,13 +170,13 @@ closed as corruption.
   error.
 
 Round deletion, pruning, archive export, and storage recovery UI are separate
-work. This version never deletes review evidence automatically. At 100 rounds it
-fails closed and requires deliberate local operator cleanup while Spec Reviewer
-is stopped before another Finish can succeed. A follow-up retention feature may
-offer explicit export and count/age-based pruning, but must preserve the newest
-round and must never silently delete unexported evidence. A stale Finish lock
-also requires deliberate local recovery. Cancel remains available and does not
-create a round.
+work. This version never deletes review evidence automatically. At 99 rounds,
+copying feedback fails closed to reserve terminal capacity; at 100, another
+Finish requires deliberate local operator cleanup while Spec Reviewer is
+stopped. A follow-up retention feature may offer explicit export and count/age-
+based pruning, but must preserve the newest round and must never silently delete
+unexported evidence. A stale Finish lock also requires deliberate local
+recovery. Cancel remains available and does not create a round.
 
 ## API contract
 
@@ -206,6 +219,12 @@ Finish keeps its existing response shape. Recording the round is part of Finish,
 not a second client request. Node and Bun entrypoints call the same application
 method with the same stable round identity and contain no round or diff logic of
 their own.
+
+`POST /api/review/handoff` requires a document path (canonicalized server-side),
+the saved review revision, the current document digest, and a 32-character
+random idempotency key. It returns the exported snapshot and its `handoff`
+checkpoint identity. For content-addressed uploads, the export still succeeds
+but the checkpoint is `null`, because uploads do not have a comparison baseline.
 
 ## Diff behavior
 

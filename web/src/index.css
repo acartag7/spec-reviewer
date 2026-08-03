@@ -4,6 +4,7 @@
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/jetbrains-mono";
 @import "./artifact.css";
+@import "./markdown.css";
 @import "./reader.css";
 @import "./theme.css";
 

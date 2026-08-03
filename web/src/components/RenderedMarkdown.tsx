@@ -2,6 +2,7 @@ import { useMemo, useRef } from "react"
 import { MessageSquarePlus } from "lucide-react"
 import type { Review, ReviewComparison, ReviewDocument, SelectionRange } from "@/api/types"
 import { ArtifactPreview } from "@/components/ArtifactPreview"
+import { MermaidDiagram } from "@/components/MermaidDiagram"
 import { buildMarkdownBlocks, sourceFromLines, sourceTextForRange } from "@/lib/markdown-provenance"
 import { renderMarkdownBlockHtml } from "@/lib/markdown-html"
 import { selectionFromElement, selectionFromWindow } from "@/lib/selection-utils"
@@ -21,9 +22,10 @@ export function RenderedMarkdown({ document, review, comparison, selection, onSe
   const changedLines = useMemo(() => currentChangedLines(comparison), [comparison])
   const blocks = useMemo(() => {
     const source = sourceFromLines(document.lines)
+    const unmarkedChangedLines = new Set<number>()
     return buildMarkdownBlocks(source).map((block) => ({
       ...block,
-      rendered: renderMarkdownBlockHtml(block, changedLines),
+      rendered: renderMarkdownBlockHtml(block, block.mermaid == null ? changedLines : unmarkedChangedLines),
     }))
   }, [changedLines, document.digest, document.lines])
 
@@ -85,7 +87,9 @@ export function RenderedMarkdown({ document, review, comparison, selection, onSe
               <MessageSquarePlus className="size-4" />
             </button>
             {changed && <span className="rendered-change-label" data-selection-ignore="true">Changed</span>}
-            {block.rendered.artifact == null ? (
+            {block.mermaid != null ? (
+              <MermaidDiagram source={block.mermaid.source} />
+            ) : block.rendered.artifact == null ? (
               <div dangerouslySetInnerHTML={{ __html: block.rendered.html }} />
             ) : (
               <ArtifactPreview artifact={block.rendered.artifact} />

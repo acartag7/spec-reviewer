@@ -22,6 +22,7 @@ import {
 import type { DocumentReader, RecentReview, ReviewSourceState, ReviewStore } from "./ports.ts";
 import type { ReviewRoundStore } from "./round-ports.ts";
 import type { TerminalAttempt } from "./review-session.ts";
+import { handoffReview, type HandoffAction } from "./handoff-review.ts";
 import { cancelTerminalReview, finishTerminalReview } from "./terminal-review.ts";
 
 export interface OpenDocumentResult {
@@ -156,6 +157,11 @@ export class ReviewerService {
   async exportReview(path: string): Promise<{ markdown: string; openAnnotations: number; carriedOver: number; activeMs: number }> {
     const resolvedPath = this.reader.resolvePath(path);
     return this.synchronized(resolvedPath, async () => this.exportLocked(resolvedPath));
+  }
+
+  async handoffReview(path: string, action: HandoffAction) {
+    const resolvedPath = this.reader.resolvePath(path);
+    return this.synchronized(resolvedPath, async () => handoffReview(this.reader, this.store, this.rounds, resolvedPath, action));
   }
 
   async finishReview(path: string, terminal: TerminalAttempt) {

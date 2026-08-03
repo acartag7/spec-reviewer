@@ -7,6 +7,7 @@ import { AppError } from "../src/domain/errors.ts";
 import { contentDigest, pathKey } from "../src/domain/ids.ts";
 import { createEmptyReview } from "../src/domain/review.ts";
 import { createReviewRound, MAX_STORED_ROUND_BYTES, type ReviewRound } from "../src/domain/review-round.ts";
+import { parseStoredRound } from "../src/domain/stored-round.ts";
 import { publishPrivateFileNoReplace } from "../src/infrastructure/immutable-private-file.ts";
 import { JsonReviewRoundStore } from "../src/infrastructure/json-review-round-store.ts";
 
@@ -94,7 +95,7 @@ test("path, filename, timestamp, schema, digest, annotation, and size mismatches
   const mutations: Array<(record: Record<string, unknown>) => void> = [
     (record) => { record.documentPath = "/different/spec.md"; },
     (record) => { record.completedAt = "2025-06-15T15:06:41.000Z"; },
-    (record) => { record.schemaVersion = 2; },
+    (record) => { record.schemaVersion = 3; },
     (record) => { record.id = `1750000000001-${"b".repeat(32)}`; },
     (record) => { record.sourceText = "# Tampered\n"; },
     (record) => { record.annotations = "invalid"; },
@@ -118,6 +119,13 @@ test("path, filename, timestamp, schema, digest, annotation, and size mismatches
   await writeFile(file, "x".repeat(MAX_STORED_ROUND_BYTES + 1), "utf8");
   assert.deepEqual(await oversized.store.loadLatest(oversized.documentPath), { state: "unavailable", reason: "baseline-unavailable" });
   await expectCode(oversized.store.loadCommitted(oversized.documentPath, round.id), "round_store_corrupt");
+});
+
+test("v1 stored rounds load as finish checkpoints", () => {
+  const round = roundFor("/tmp/spec.md");
+  const legacy = { ...round, schemaVersion: 1 } as Record<string, unknown>;
+  delete legacy.trigger;
+  assert.equal(parseStoredRound(legacy).trigger, "finish");
 });
 
 test("duplicate stable attempt suffixes fail reads and later writes", async () => {
