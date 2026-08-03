@@ -21,7 +21,7 @@ export function ChangesView({ comparison, document, selection, onSelect }: Chang
     return <EmptyChanges message="Changes are too large to display safely." />
   }
   if (comparison.state === "unchanged") {
-    return <EmptyChanges message="No line-content changes since the latest completed review." />
+    return <EmptyChanges message={`No line-content changes since ${checkpointDescription(comparison.trigger)}.`} />
   }
   return (
     <div
@@ -45,7 +45,7 @@ export function ChangesView({ comparison, document, selection, onSelect }: Chang
       }}
     >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-3 py-2 text-sm">
-        <span className="font-medium">Changes since {formatCompletedAt(comparison.completedAt)}</span>
+        <span className="font-medium">Changes since {checkpointDescription(comparison.trigger)} {formatCompletedAt(comparison.completedAt)}</span>
         <span className="font-mono">
           <span className="text-emerald-700 dark:text-emerald-300">+{comparison.added}</span>{" "}
           <span className="text-red-700 dark:text-red-300">−{comparison.removed}</span>
@@ -149,13 +149,17 @@ function EmptyChanges({ message }: { message: string }) {
 
 function unavailableMessage(reason: Extract<ReviewComparison, { state: "unavailable" }>["reason"]): string {
   if (reason === "immutable-upload") return "Uploaded documents do not have a mutable review baseline."
-  if (reason === "baseline-unavailable") return "The latest completed review baseline is unavailable or invalid."
-  return "No completed review baseline is available."
+  if (reason === "baseline-unavailable") return "The latest review checkpoint is unavailable or invalid."
+  return "Copy feedback or finish the review to create a comparison baseline."
 }
 
 function formatCompletedAt(value: string): string {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? "the latest completed review" : date.toLocaleString()
+  return Number.isNaN(date.getTime()) ? "at the latest checkpoint" : `at ${date.toLocaleString()}`
+}
+
+function checkpointDescription(trigger: "handoff" | "finish" | undefined): string {
+  return trigger === "handoff" ? "feedback was copied" : "the review was finished"
 }
 
 function visibleDiffText(value: string): string {

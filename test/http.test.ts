@@ -52,11 +52,27 @@ test("HTTP API opens, saves, and exports a review", async (t) => {
   });
   const exported = await json(`${base}/api/export?path=${encodeURIComponent(docPath)}`);
   assert.match(exported.markdown, /Fix this/);
+  await assert.rejects(readdir(join(config.storageDir, "rounds")), { code: "ENOENT" });
+  const handoff = await json(`${base}/api/review/handoff`, {
+    method: "POST",
+    body: JSON.stringify({
+      path: docPath,
+      baseRevision: saved.revision,
+      documentDigest: opened.document.digest,
+      idempotencyKey: "a".repeat(32),
+    }),
+    headers: { "content-type": "application/json" },
+  });
+  assert.equal(handoff.checkpoint.trigger, "handoff");
+  assert.match(handoff.markdown, /Fix this/);
+  assert.equal((await readdir(join(config.storageDir, "rounds", pathKey(docPath)))).filter((name) => name.endsWith(".json")).length, 1);
   await writeFile(docPath, "# Demo\n\nChanged\n", "utf8");
   const changed = await json(`${base}/api/document?path=${encodeURIComponent(docPath)}`);
   assert.equal(changed.sourceState, "changed");
   assert.equal(changed.stale, true);
   assert.equal(changed.review.annotations[0].anchorState, "not-found");
+  assert.equal(changed.comparison.state, "diff");
+  assert.equal(changed.comparison.trigger, "handoff");
   await json(`${base}/api/review`, {
     method: "POST",
     body: JSON.stringify({

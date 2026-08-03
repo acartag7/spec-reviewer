@@ -83,7 +83,7 @@ async function persistTerminalMetrics(
   }
 }
 
-function exportRound(round: ReviewRound): ReviewExportResult {
+export function exportRound(round: ReviewRound): ReviewExportResult {
   const document = parseMarkdownDocument(round.documentPath, round.sourceText);
   const review = withResolvedAnchors(document, reviewFromRound(round));
   return {

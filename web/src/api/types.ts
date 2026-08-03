@@ -4,6 +4,7 @@ export type AnnotationKind = "issue" | "question" | "suggestion" | "decision" | 
 export type AnnotationSeverity = "blocker" | "major" | "minor" | "note"
 export type AnnotationStatus = "open" | "resolved"
 export type AnnotationAnchorState = "ok" | "moved" | "ambiguous" | "not-found"
+export type ReviewCheckpointTrigger = "handoff" | "finish"
 
 export interface DocumentLine {
   number: number
@@ -74,6 +75,7 @@ export type DiffRow =
 
 interface ComparedRound {
   roundId: string
+  trigger?: ReviewCheckpointTrigger
   completedAt: string
   beforeDigest: string
   afterDigest: string
@@ -115,3 +117,11 @@ export interface ReviewDraft {
 export type ReviewCompletion =
   | { status: "finished"; path: string; markdown: string; openAnnotations: number; carriedOver: number; activeMs: number }
   | { status: "canceled"; path: string; reason: string | null; activeMs: number }
+
+export interface ReviewHandoff {
+  markdown: string
+  openAnnotations: number
+  carriedOver: number
+  activeMs: number
+  checkpoint: { id: string; trigger: "handoff"; capturedAt: string } | null
+}

@@ -1,4 +1,4 @@
-import type { OpenDocumentResult, RecentReview, Review, ReviewCompletion, ReviewDraft } from "@/api/types"
+import type { OpenDocumentResult, RecentReview, Review, ReviewCompletion, ReviewDraft, ReviewHandoff } from "@/api/types"
 
 export class ApiError extends Error {
   readonly status: number
@@ -56,6 +56,9 @@ export const api = {
   exportReview: (path: string) => {
     const encoded = encodeURIComponent(path)
     return request<{ markdown: string }>("GET", `/api/export?path=${encoded}`)
+  },
+  handoffReview: (input: { path: string; baseRevision: number; documentDigest: string; idempotencyKey: string }) => {
+    return request<ReviewHandoff>("POST", "/api/review/handoff", input)
   },
   finishReview: (path: string, activeMsDelta = 0) => request<ReviewCompletion>("POST", "/api/session/finish", { path, activeMsDelta }),
   cancelReview: (path: string, activeMsDelta = 0) => request<ReviewCompletion>("POST", "/api/session/cancel", { path, activeMsDelta }),

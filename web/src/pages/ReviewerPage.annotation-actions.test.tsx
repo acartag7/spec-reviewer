@@ -19,6 +19,18 @@ test.each([
     if (url === "/api/reviews") return json([])
     if (url.startsWith("/api/export?")) return json({ markdown: "# Agent Review Feedback" })
     if (url.startsWith("/api/document?")) return json({ document: documentFixture, review: stored, stale: false, sourceState: "current" })
+    if (url === "/api/review/handoff" && init?.method === "POST") {
+      const body = JSON.parse(init.body as string)
+      expect(body).toMatchObject({ path: documentFixture.path, documentDigest: documentFixture.digest, baseRevision: stored.revision })
+      expect(body.idempotencyKey).toMatch(/^[a-f0-9]{32}$/)
+      return json({
+        markdown: "# Agent Review Feedback",
+        openAnnotations: 0,
+        carriedOver: 0,
+        activeMs: 0,
+        checkpoint: { id: `1750000000000-${body.idempotencyKey}`, trigger: "handoff", capturedAt: "2025-06-15T15:06:40.000Z" },
+      })
+    }
     if (url === "/api/review" && init?.method === "POST") {
       const body = JSON.parse(init.body as string) as { summary: string; annotations: Annotation[] }
       stored = { ...reviewAt(stored.revision + 1, body.annotations), summary: body.summary }
@@ -42,7 +54,7 @@ test.each([
     expect(screen.getByRole("button", { name: "Add note" })).toBeDisabled()
   }
   fireEvent.click(screen.getByRole("button", { name: "Copy feedback" }))
-  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Feedback ready below"))
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Feedback checkpointed; copy it from the handoff panel"))
 })
 
 test.each(["success", "reload"] as const)("preserves edits made while a deletion settles on %s", async (outcome) => {

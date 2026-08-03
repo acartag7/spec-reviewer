@@ -21,6 +21,7 @@ export function buildReviewComparison(
 ): ReviewComparison {
   const metadata = {
     roundId: round.id,
+    trigger: round.trigger,
     completedAt: round.completedAt,
     beforeDigest: round.documentDigest,
     afterDigest,

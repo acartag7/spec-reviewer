@@ -2,14 +2,14 @@ import { contentDigest } from "./ids.ts";
 import { AppError } from "./errors.ts";
 import { MAX_ACTIVE_MS } from "./review.ts";
 import { parseStoredReview } from "./stored-review.ts";
-import { ROUND_ID_PATTERN, type ReviewRound } from "./review-round.ts";
+import { ROUND_ID_PATTERN, type ReviewCheckpointTrigger, type ReviewRound } from "./review-round.ts";
 
 const MAX_ROUND_SOURCE_BYTES = 6 * 1024 * 1024;
 
 export function parseStoredRound(value: unknown): ReviewRound {
   try {
     const record = object(value);
-    if (record.schemaVersion !== 1) invalid();
+    const trigger = triggerForVersion(record);
     const id = string(record.id);
     const match = ROUND_ID_PATTERN.exec(id);
     if (match == null) invalid();
@@ -31,8 +31,9 @@ export function parseStoredRound(value: unknown): ReviewRound {
     const documentDigest = string(record.documentDigest);
     if (!/^[a-f0-9]{64}$/.test(documentDigest) || contentDigest(sourceText) !== documentDigest) invalid();
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id,
+      trigger,
       documentPath: review.documentPath,
       documentDigest,
       reviewDigest: review.documentDigest,
@@ -47,6 +48,12 @@ export function parseStoredRound(value: unknown): ReviewRound {
     if (error instanceof AppError && error.code === "round_store_corrupt") throw error;
     invalid();
   }
+}
+
+function triggerForVersion(record: Record<string, unknown>): ReviewCheckpointTrigger {
+  if (record.schemaVersion === 1) return "finish";
+  if (record.schemaVersion !== 2 || (record.trigger !== "handoff" && record.trigger !== "finish")) invalid();
+  return record.trigger as ReviewCheckpointTrigger;
 }
 
 function assertTimestampBinding(epochText: string, completedAt: string): void {

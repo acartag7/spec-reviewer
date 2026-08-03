@@ -89,7 +89,7 @@ test("a stale Finish lock fails closed with a fixed busy error", async () => {
   await assert.rejects(ctx.store.commit(roundFor(ctx.documentPath, 1_750_000_000_001)), (error) => {
     return error instanceof AppError
       && error.code === "round_store_busy"
-      && error.message === "Another Finish may be active; if none is running, stop Spec Reviewer, remove the local .finish.lock file, and retry";
+      && error.message === "Another review checkpoint may be active; if none is running, stop Spec Reviewer, remove the local .finish.lock file, and retry";
   });
 });
 

@@ -57,8 +57,8 @@ export function ReviewSidebar(props: ReviewSidebarProps) {
           <TabsTrigger value="notes" className="text-xs" onClick={() => setTab("notes")}>Notes <span className="text-[10px]">{openCount}</span></TabsTrigger>
           <TabsTrigger value="export" className="text-xs" onClick={() => setTab("export")}>Export</TabsTrigger>
         </TabsList>
-        <div className="review-scroll min-h-0 flex-1 overflow-auto">
-          <TabsContent value="write" className="p-3">
+        <div className="review-scroll min-h-0 flex-1 overflow-auto p-2">
+          <TabsContent value="write" className="rounded-md border bg-card p-3 shadow-sm">
             <AnnotationPanel
               form={props.form}
               selection={props.selection}
@@ -71,7 +71,7 @@ export function ReviewSidebar(props: ReviewSidebarProps) {
               onReset={props.onFormReset}
             />
           </TabsContent>
-          <TabsContent value="notes" className="grid gap-3 p-3">
+          <TabsContent value="notes" className="grid gap-3 rounded-md border bg-card p-3 shadow-sm">
             <ReviewSummary
               value={props.summary}
               dirty={props.summary !== props.review.summary}
@@ -93,7 +93,7 @@ export function ReviewSidebar(props: ReviewSidebarProps) {
               onDelete={props.onDeleteAnnotation}
             />
           </TabsContent>
-          <TabsContent value="export" className="p-3">
+          <TabsContent value="export" className="rounded-md border bg-card p-3 shadow-sm">
             <AgentExport
               markdown={props.exportMarkdown}
               loading={props.exportLoading}

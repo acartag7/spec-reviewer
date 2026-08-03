@@ -22,10 +22,15 @@ export interface MarkdownBlock {
   endLine: number
   anchors: SourceAnchor[]
   artifact: MarkdownArtifact | null
+  mermaid: MermaidDiagram | null
 }
 
 export interface MarkdownArtifact {
   kind: "html" | "svg"
+  source: string
+}
+
+export interface MermaidDiagram {
   source: string
 }
 
@@ -63,6 +68,7 @@ export function buildMarkdownBlocks(source: string): MarkdownBlock[] {
       endLine,
       anchors: anchorsForToken(token, source, startOffset, startLine, lineOf),
       artifact: artifactForToken(token),
+      mermaid: mermaidForToken(token),
     })
   }
 
@@ -147,4 +153,9 @@ function artifactForToken(token: MarkdownToken): MarkdownArtifact | null {
   if (lang === "html") return { kind: "html", source: token.text }
   if (lang === "svg") return { kind: "svg", source: token.text }
   return null
+}
+
+function mermaidForToken(token: MarkdownToken): MermaidDiagram | null {
+  if (token.type !== "code" || token.text == null) return null
+  return (token.lang ?? "").trim().toLowerCase() === "mermaid" ? { source: token.text } : null
 }

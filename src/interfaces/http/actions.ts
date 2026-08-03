@@ -26,6 +26,21 @@ export function readActiveTime(value: unknown): { path: string; activeMsDelta: u
   return { path: requiredPath(record.path), activeMsDelta: record.activeMsDelta };
 }
 
+export function readHandoffAction(value: unknown): {
+  path: string;
+  baseRevision: unknown;
+  documentDigest: unknown;
+  idempotencyKey: unknown;
+} {
+  const record = objectBody(value);
+  return {
+    path: requiredPath(record.path),
+    baseRevision: record.baseRevision,
+    documentDigest: record.documentDigest,
+    idempotencyKey: record.idempotencyKey,
+  };
+}
+
 function objectBody(value: unknown): Record<string, unknown> {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
     throw new AppError("invalid_request", 400, "request body must be an object");

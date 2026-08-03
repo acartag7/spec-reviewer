@@ -1,3 +1,5 @@
+import type { ReviewCheckpointTrigger } from "./review-round.ts";
+
 export type ComparisonUnavailableReason = "no-baseline" | "baseline-unavailable" | "immutable-upload";
 
 export type DiffRow =
@@ -7,6 +9,7 @@ export type DiffRow =
 
 interface ComparedRound {
   roundId: string;
+  trigger: ReviewCheckpointTrigger;
   completedAt: string;
   beforeDigest: string;
   afterDigest: string;

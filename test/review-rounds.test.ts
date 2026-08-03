@@ -12,6 +12,7 @@ import type { ReviewRound, RoundBaseline } from "../src/domain/review-round.ts";
 import { FileDocumentReader } from "../src/infrastructure/file-document-reader.ts";
 import { JsonReviewRoundStore } from "../src/infrastructure/json-review-round-store.ts";
 import { JsonReviewStore } from "../src/infrastructure/json-review-store.ts";
+import { storeUploadedMarkdown } from "../src/interfaces/http/uploads.ts";
 
 async function fresh(rounds?: ReviewRoundStore) {
   const dir = await mkdtemp(join(tmpdir(), "spec-reviewer-rounds-"));
@@ -23,7 +24,6 @@ async function fresh(rounds?: ReviewRoundStore) {
   const service = new ReviewerService(new FileDocumentReader(), reviews, roundStore);
   return { dir, path, storageDir, reviews, roundStore, service };
 }
-
 async function finish(service: ReviewerService, waiter: ReviewSessionWaiter, path: string, delta = 0): Promise<ReviewCompletion> {
   return waiter.runTerminal(path, delta, async (terminal) => ({
     status: "finished" as const,
@@ -31,7 +31,6 @@ async function finish(service: ReviewerService, waiter: ReviewSessionWaiter, pat
     ...await service.finishReview(path, terminal),
   }));
 }
-
 test("Finish commits private immutable rounds and opens the latest red-green comparison", async () => {
   const ctx = await fresh();
   const first = await finish(ctx.service, new ReviewSessionWaiter(ctx.path), ctx.path, 100);
@@ -63,6 +62,77 @@ test("Finish commits private immutable rounds and opens the latest red-green com
     activeMs: await ctx.service.cancelReview(ctx.path, terminal),
   }));
   assert.equal((await readdir(roundDir)).filter((name) => name.endsWith(".json")).length, 2);
+});
+
+test("Handoff commits the copied feedback baseline and retries the same immutable checkpoint", async () => {
+  const ctx = await fresh();
+  const opened = await ctx.service.openDocument(ctx.path);
+  const saved = await ctx.service.saveReview({
+    path: ctx.path,
+    baseRevision: opened.review.revision,
+    annotations: [{ lineStart: 3, lineEnd: 3, kind: "issue", severity: "major", note: "Fix version A" }],
+  });
+  const action = {
+    baseRevision: saved.revision,
+    documentDigest: opened.document.digest,
+    idempotencyKey: "a".repeat(32),
+  };
+  const handoff = await ctx.service.handoffReview(ctx.path, action);
+  assert.ok(handoff.checkpoint);
+  assert.equal(handoff.checkpoint.trigger, "handoff");
+  assert.match(handoff.markdown, /Fix version A/);
+
+  const roundDir = join(ctx.storageDir, "rounds", pathKey(ctx.path));
+  const names = (await readdir(roundDir)).filter((name) => name.endsWith(".json"));
+  assert.equal(names.length, 1);
+  assert.equal((await stat(join(roundDir, names[0]!))).mode & 0o777, 0o600);
+
+  await writeFile(ctx.path, "# Spec\n\nVersion B\n", "utf8");
+  const changed = await ctx.service.openDocument(ctx.path);
+  assert.equal(changed.comparison.state, "diff");
+  if (changed.comparison.state === "diff") assert.equal(changed.comparison.trigger, "handoff");
+
+  const retry = await ctx.service.handoffReview(ctx.path, action);
+  assert.equal(retry.checkpoint?.id, handoff.checkpoint.id);
+  assert.equal(retry.markdown, handoff.markdown);
+  assert.equal((await readdir(roundDir)).filter((name) => name.endsWith(".json")).length, 1);
+  for (const invalidRetry of [
+    { ...action, documentDigest: "b".repeat(64) },
+    { ...action, baseRevision: action.baseRevision + 1 },
+  ]) {
+    await assert.rejects(
+      ctx.service.handoffReview(ctx.path, invalidRetry),
+      (error) => error instanceof AppError && error.code === "review_conflict",
+    );
+  }
+});
+
+test("Handoff rejects an out-of-date document before creating a checkpoint", async () => {
+  const ctx = await fresh();
+  const opened = await ctx.service.openDocument(ctx.path);
+  await assert.rejects(
+    ctx.service.handoffReview(ctx.path, {
+      baseRevision: opened.review.revision,
+      documentDigest: "a".repeat(64),
+      idempotencyKey: "b".repeat(32),
+    }),
+    (error) => error instanceof AppError && error.code === "review_conflict",
+  );
+  await assert.rejects(readdir(join(ctx.storageDir, "rounds")), { code: "ENOENT" });
+});
+
+test("Handoff still copies uploaded documents without inventing a baseline", async () => {
+  const ctx = await fresh();
+  const uploaded = await storeUploadedMarkdown(ctx.storageDir, "uploaded.md", "# Uploaded\n");
+  const opened = await ctx.service.openDocument(uploaded);
+  const handoff = await ctx.service.handoffReview(uploaded, {
+    baseRevision: opened.review.revision,
+    documentDigest: opened.document.digest,
+    idempotencyKey: "c".repeat(32),
+  });
+  assert.equal(handoff.checkpoint, null);
+  assert.match(handoff.markdown, /# Agent Review Feedback/);
+  await assert.rejects(readdir(join(ctx.storageDir, "rounds")), { code: "ENOENT" });
 });
 
 test("a pre-commit failure retries one delta and one edited round", async () => {

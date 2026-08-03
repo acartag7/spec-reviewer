@@ -194,7 +194,7 @@ async function acquireFinishLock(directory: string): Promise<(committed: boolean
       throw new AppError(
         "round_store_busy",
         409,
-        "Another Finish may be active; if none is running, stop Spec Reviewer, remove the local .finish.lock file, and retry",
+        "Another review checkpoint may be active; if none is running, stop Spec Reviewer, remove the local .finish.lock file, and retry",
       );
     }
     if (created) {

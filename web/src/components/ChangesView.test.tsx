@@ -94,7 +94,7 @@ test("a real diff defaults to Changes and Radix provides APG arrow navigation", 
 
 test("unavailable and bounded comparisons state why no diff is shown", () => {
   const { rerender } = render(<ChangesView comparison={{ state: "unavailable", reason: "no-baseline" }} document={documentFixture} selection={emptySelection} onSelect={vi.fn()} />)
-  expect(screen.getByText("No completed review baseline is available.")).toBeInTheDocument()
+  expect(screen.getByText("Copy feedback or finish the review to create a comparison baseline.")).toBeInTheDocument()
   rerender(<ChangesView comparison={{
     state: "too-large",
     roundId: "1750000000000-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

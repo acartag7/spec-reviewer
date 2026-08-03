@@ -18,7 +18,7 @@ export function AgentExport({ markdown, loading, disabled = false, annotations, 
     <section aria-labelledby="agent-export-heading" className="grid gap-3">
       <div>
         <h3 id="agent-export-heading" className="text-xs font-medium">Agent handoff</h3>
-        <p className="mt-1 text-[11px] leading-4 text-muted-foreground">Exact Markdown returned to the waiting agent.</p>
+        <p className="mt-1 text-[11px] leading-4 text-muted-foreground">Handoff saves an immutable comparison checkpoint before copying this Markdown.</p>
       </div>
       {drift.total > 0 ? (
         <div role="alert" className="border-l-2 border-sev-major bg-sev-major/10 px-3 py-2 text-sm">
@@ -31,7 +31,7 @@ export function AgentExport({ markdown, loading, disabled = false, annotations, 
       <div className="flex justify-end">
         <Button type="button" onClick={onCopy} disabled={loading || disabled}>
           <Copy />
-          Copy
+          Handoff & copy
         </Button>
       </div>
     </section>

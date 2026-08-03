@@ -1,6 +1,6 @@
 import { expect, test } from "vitest"
 import { buildMarkdownBlocks, sourceTextForRange } from "@/lib/markdown-provenance"
-import { renderMarkdownBlockHtml } from "@/lib/markdown-html"
+import { renderMarkdownBlockHtml, sanitizeMermaidSvg } from "@/lib/markdown-html"
 import { selectionFromElement } from "@/lib/selection-utils"
 
 const source = [
@@ -57,6 +57,27 @@ test("renderMarkdownBlockHtml adds finer list and code source anchors", () => {
     .toEqual(["9", "10", "11"])
   expect(Array.from(codeHost.querySelectorAll<HTMLElement>("pre code span")).map((item) => item.dataset.sourceLine))
     .toEqual(["16", "17", "18", "19"])
+})
+
+test("buildMarkdownBlocks identifies fenced Mermaid diagrams without treating them as artifacts", () => {
+  const [block] = buildMarkdownBlocks("```mermaid\nflowchart TD\n  A --> B\n```")
+  if (block == null) throw new Error("fixture block missing")
+
+  expect(block).toMatchObject({
+    startLine: 1,
+    endLine: 4,
+    artifact: null,
+    mermaid: { source: "flowchart TD\n  A --> B" },
+  })
+})
+
+test("renderMarkdownBlockHtml wraps Markdown tables for responsive scrolling", () => {
+  const [block] = buildMarkdownBlocks("| Owner | Status |\n| --- | --- |\n| Arnold | In progress |")
+  if (block == null) throw new Error("fixture block missing")
+
+  const host = htmlHost(renderMarkdownBlockHtml(block).html)
+
+  expect(host.querySelector(".markdown-table-wrap > table")).not.toBeNull()
 })
 
 test("rendered change markers stay on the exact list item instead of the whole list", () => {
@@ -172,6 +193,13 @@ test("renderMarkdownBlockHtml identifies hinted HTML artifacts", () => {
   expect(rendered.artifact?.html).toContain("<button>Run</button>")
   expect(rendered.artifact?.html).not.toContain("onclick")
   expect(rendered.artifact?.html).not.toContain("<script")
+})
+
+test("sanitizeMermaidSvg strips active SVG content", () => {
+  const svg = sanitizeMermaidSvg('<svg><circle onclick="alert(1)" /><script>alert(1)</script></svg>')
+
+  expect(svg).not.toContain("onclick")
+  expect(svg).not.toContain("<script")
 })
 
 function htmlHost(html: string): HTMLElement {
