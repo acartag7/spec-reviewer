@@ -26,7 +26,7 @@ if [[ ! -f "$TARBALL" ]]; then
   exit 1
 fi
 
-TMPDIR="$(mktemp -d)"
+SMOKE_DIR="$(mktemp -d)"
 DEVELOPER_WAS_ON=0
 if brew developer 2>/dev/null | grep -q "enabled"; then
   DEVELOPER_WAS_ON=1
@@ -38,12 +38,12 @@ cleanup() {
   if [[ "$DEVELOPER_WAS_ON" != "1" ]]; then
     brew developer off >/dev/null 2>&1 || true
   fi
-  rm -rf "$TMPDIR"
+  rm -rf "$SMOKE_DIR"
 }
 trap cleanup EXIT
 
 SHA="$(shasum -a 256 "$TARBALL" | awk '{print $1}')"
-FORMULA="$TMPDIR/spec-reviewer-smoke.rb"
+FORMULA="$SMOKE_DIR/spec-reviewer-smoke.rb"
 cat > "$FORMULA" <<RUBY
 class SpecReviewerSmoke < Formula
   desc "Local-first Markdown spec reviewer for source-anchored agent feedback"
