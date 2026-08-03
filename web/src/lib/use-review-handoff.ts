@@ -9,7 +9,7 @@ interface UseReviewHandoffOptions {
   hasUnsavedWork: boolean
   operationInFlightRef: RefObject<boolean>
   terminalInFlight: () => boolean
-  applyOpenResult: (result: OpenDocumentResult) => void
+  applyOpenResult: (result: OpenDocumentResult, shouldResetDraft?: boolean) => void
   showStatus: (message: string) => void
 }
 
@@ -47,7 +47,7 @@ export function useReviewHandoff(options: UseReviewHandoffOptions) {
       }
       let reloaded = true
       try {
-        options.applyOpenResult(await api.openDocument(document.path))
+        options.applyOpenResult(await api.openDocument(document.path), false)
       } catch {
         reloaded = false
       }

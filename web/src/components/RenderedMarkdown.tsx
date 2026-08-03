@@ -22,9 +22,10 @@ export function RenderedMarkdown({ document, review, comparison, selection, onSe
   const changedLines = useMemo(() => currentChangedLines(comparison), [comparison])
   const blocks = useMemo(() => {
     const source = sourceFromLines(document.lines)
+    const unmarkedChangedLines = new Set<number>()
     return buildMarkdownBlocks(source).map((block) => ({
       ...block,
-      rendered: renderMarkdownBlockHtml(block, changedLines),
+      rendered: renderMarkdownBlockHtml(block, block.mermaid == null ? changedLines : unmarkedChangedLines),
     }))
   }, [changedLines, document.digest, document.lines])
 

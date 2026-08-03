@@ -88,6 +88,37 @@ test.each(["success", "reload"] as const)("preserves edits made while a deletion
   expect(screen.getByRole("textbox", { name: "Feedback" })).toHaveValue("Keep this newer draft")
 })
 
+test("preserves a selection made while feedback handoff reloads", async () => {
+  let handoffStarted = false
+  let completeHandoff!: (response: Response) => void
+  const pendingHandoff = new Promise<Response>((resolve) => { completeHandoff = resolve })
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url === "/api/config") return json({ defaultDocumentPath: null, waitForReview: false })
+    if (url === "/api/reviews") return json([])
+    if (url.startsWith("/api/export?")) return json({ markdown: "# Agent Review Feedback" })
+    if (url.startsWith("/api/document?")) return json({ document: documentFixture, review: reviewAt(0, []), stale: false, sourceState: "current" })
+    if (url === "/api/review/handoff" && init?.method === "POST") {
+      handoffStarted = true
+      return pendingHandoff
+    }
+    return json({ error: { code: "not_found", message: "Not found" } }, 404)
+  })
+
+  renderPage()
+  await screen.findByRole("tab", { name: /Notes/ })
+  fireEvent.click(screen.getByRole("button", { name: "Copy feedback" }))
+  await waitFor(() => expect(handoffStarted).toBe(true))
+  fireEvent.click(screen.getByRole("button", { name: "Add note at line 1" }))
+  completeHandoff(json({
+    markdown: "# Agent Review Feedback", openAnnotations: 0, carriedOver: 0, activeMs: 0,
+    checkpoint: { id: "1750000000000-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", trigger: "handoff", capturedAt: "2025-06-15T15:06:40.000Z" },
+  }))
+
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Feedback checkpointed"))
+  expect(screen.getByText("Line 1")).toBeInTheDocument()
+})
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   render(
