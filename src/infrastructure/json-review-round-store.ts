@@ -61,8 +61,8 @@ export class JsonReviewRoundStore implements ReviewRoundStore {
         committed = true;
         return afterLock;
       }
-      if (names.length >= MAX_ROUNDS_PER_DOCUMENT) {
-        throw new AppError("round_limit_reached", 409, "Review round limit reached; remove local history before retrying");
+      if (names.length >= roundLimit(requested.trigger)) {
+        throw roundLimitReached(requested.trigger);
       }
       const round = monotonicRound(requested, names);
       const content = `${JSON.stringify(round, null, 2)}\n`;
@@ -136,6 +136,21 @@ function monotonicRound(round: ReviewRound, names: string[]): ReviewRound {
     id: `${String(epoch).padStart(13, "0")}-${requested[2]}`,
     completedAt: new Date(epoch).toISOString(),
   });
+}
+
+function roundLimit(trigger: ReviewRound["trigger"]): number {
+  return trigger === "handoff" ? MAX_ROUNDS_PER_DOCUMENT - 1 : MAX_ROUNDS_PER_DOCUMENT;
+}
+
+function roundLimitReached(trigger: ReviewRound["trigger"]): AppError {
+  if (trigger === "handoff") {
+    return new AppError(
+      "round_limit_reached",
+      409,
+      "Review history reserves one slot for Finish; finish this review before copying feedback",
+    );
+  }
+  return new AppError("round_limit_reached", 409, "Review round limit reached; remove local history before retrying");
 }
 
 async function assertRealDirectoryPath(path: string): Promise<void> {

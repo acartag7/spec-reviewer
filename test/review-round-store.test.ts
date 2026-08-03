@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { AppError } from "../src/domain/errors.ts";
 import { contentDigest, pathKey } from "../src/domain/ids.ts";
 import { createEmptyReview } from "../src/domain/review.ts";
-import { createReviewRound, type ReviewRound } from "../src/domain/review-round.ts";
+import { createReviewRound, type ReviewCheckpointTrigger, type ReviewRound } from "../src/domain/review-round.ts";
 import { JsonReviewRoundStore } from "../src/infrastructure/json-review-round-store.ts";
 
 async function fresh() {
@@ -16,11 +16,12 @@ async function fresh() {
   return { dir, storageDir, documentPath, store: new JsonReviewRoundStore(storageDir) };
 }
 
-function roundFor(path: string, epoch: number, source = "# Spec\n"): ReviewRound {
+function roundFor(path: string, epoch: number, source = "# Spec\n", trigger: ReviewCheckpointTrigger = "finish"): ReviewRound {
   const review = createEmptyReview(path, contentDigest(source));
   return createReviewRound({
     id: `${epoch}-${epoch.toString(16).padStart(32, "0")}`,
     completedAt: new Date(epoch).toISOString(),
+    trigger,
   }, source, contentDigest(source), review);
 }
 
@@ -104,6 +105,19 @@ test("the 101st committed round is rejected without eviction or a stale lock", a
   const entries = await readdir(directory);
   assert.equal(entries.filter((name) => name.endsWith(".json")).length, 100);
   assert.equal(entries.includes(".finish.lock"), false);
+});
+
+test("handoff reserves the final round slot for Finish", async () => {
+  const ctx = await fresh();
+  const firstEpoch = 1_750_000_000_000;
+  for (let index = 0; index < 99; index += 1) {
+    await ctx.store.commit(roundFor(ctx.documentPath, firstEpoch + index));
+  }
+  await expectCode(ctx.store.commit(roundFor(ctx.documentPath, firstEpoch + 99, "# Spec\n", "handoff")), "round_limit_reached");
+  const finish = await ctx.store.commit(roundFor(ctx.documentPath, firstEpoch + 100));
+  assert.ok(finish);
+  const directory = join(ctx.storageDir, "rounds", pathKey(ctx.documentPath));
+  assert.equal((await readdir(directory)).filter((name) => name.endsWith(".json")).length, 100);
 });
 
 test("content-addressed uploads report their distinct unavailable reason", async () => {
