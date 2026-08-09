@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { createServer } from "node:net";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
@@ -42,12 +42,11 @@ async function smokeServer() {
     const base = `http://127.0.0.1:${port}`;
     await waitForHealth(base);
     const rootHtml = await textFetch(`${base}/`);
-    if (!rootHtml.includes("Spec Reviewer") && !rootHtml.includes("root")) {
-      throw new Error("Root HTML did not look like the app");
+    const builtHtml = readFileSync(join(root, "dist", "index.html"), "utf8");
+    if (rootHtml !== builtHtml) {
+      throw new Error("Binary did not serve the built app byte-for-byte");
     }
-    for (const asset of assetPaths(rootHtml).slice(0, 3)) {
-      await okFetch(new URL(asset, base).toString());
-    }
+    await assertBuiltAssets(base);
     const document = await jsonFetch(`${base}/api/document?path=${encodeURIComponent(doc)}`);
     if (document.document.title !== "Smoke") throw new Error("Document API returned the wrong title");
   } finally {
@@ -266,9 +265,23 @@ async function jsonFetch(url, init) {
   return (await okFetch(url, init)).json();
 }
 
-function assetPaths(html) {
-  const matches = html.matchAll(/\b(?:href|src)="([^"]+\.(?:css|js|woff2?))"/g);
-  return Array.from(matches, (match) => match[1]).filter(Boolean);
+async function assertBuiltAssets(base) {
+  const distDir = join(root, "dist");
+  for (const path of listFiles(distDir)) {
+    const route = `/${relative(distDir, path).split(sep).join("/")}`;
+    const response = await okFetch(new URL(route, base).toString());
+    const served = Buffer.from(await response.arrayBuffer());
+    if (!served.equals(readFileSync(path))) {
+      throw new Error(`Binary altered built asset ${route}`);
+    }
+  }
+}
+
+function listFiles(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    return entry.isDirectory() ? listFiles(path) : [path];
+  });
 }
 
 function collectOutput(child) {

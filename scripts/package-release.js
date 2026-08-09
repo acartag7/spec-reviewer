@@ -25,6 +25,7 @@ rmSync(releaseDir, { recursive: true, force: true });
 mkdirSync(releaseDir, { recursive: true });
 
 run("pnpm", ["run", "build"]);
+run("node", ["scripts/generate-embedded-assets.js"]);
 
 const artifacts = [];
 for (const target of targets) {
