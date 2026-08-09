@@ -1,4 +1,4 @@
-import app from "../dist/index.html";
+import { embeddedAsset } from "../build/embedded-assets.ts";
 import { loadConfig, type AppConfig } from "../src/config.ts";
 import { createReviewerService } from "../src/application/app-factory.ts";
 import { ReviewSessionWaiter, type ReviewCompletion } from "../src/application/review-session.ts";
@@ -10,7 +10,6 @@ import { openUrl } from "../src/cli/open-url.ts";
 import { runSkillCommand } from "../src/cli/skill-installer.ts";
 
 const maxJsonBytes = 3 * 1024 * 1024;
-type BunServer = ReturnType<typeof Bun.serve>;
 async function main(): Promise<number> {
   try {
     const config = loadConfig();
@@ -27,17 +26,11 @@ async function main(): Promise<number> {
     const waitSession = config.waitForReview
       ? new ReviewSessionWaiter(config.defaultDocumentPath ?? "")
       : null;
-    const assetServer = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      routes: { "/": app },
-      fetch: () => text("Not found", 404),
-    });
     const server = Bun.serve({
       hostname: config.host,
       port: config.port,
       fetch: (request, activeServer) => {
-        return routeRequest(request, activeServer.port, config, service, waitSession, assetServer);
+        return routeRequest(request, activeServer.port, config, service, waitSession);
       },
     });
     const url = reviewUrl(config, server.port);
@@ -46,7 +39,6 @@ async function main(): Promise<number> {
     if (waitSession == null) return 0;
     const completion = await waitSession.wait();
     await server.stop(false);
-    await assetServer.stop(false);
     return printCompletion(config, completion);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
@@ -60,7 +52,6 @@ async function routeRequest(
   config: AppConfig,
   service: ReturnType<typeof createReviewerService>,
   waitSession: ReviewSessionWaiter | null,
-  assetServer: BunServer,
 ): Promise<Response> {
   if (!isSafeRequest(request, port)) return text("Forbidden", 403);
   const url = new URL(request.url);
@@ -68,7 +59,7 @@ async function routeRequest(
     if (url.pathname.startsWith("/api/")) {
       return await routeApi(request, url, config, service, waitSession);
     }
-    return await fetchAsset(assetServer, url);
+    return fetchAsset(url);
   } catch (error) {
     const response = publicError(error);
     return json(response.body, response.status);
@@ -130,12 +121,14 @@ async function routeApi(
   throw new AppError("not_found", 404, "Not found");
 }
 
-async function fetchAsset(assetServer: BunServer, url: URL): Promise<Response> {
-  const target = new URL(url.pathname === "/" ? "/" : url.pathname, assetServer.url);
-  target.search = url.search;
-  const response = await fetch(target);
-  if (response.status !== 404 || isAssetPath(url.pathname)) return withSecurityHeaders(response);
-  return withSecurityHeaders(await fetch(new URL("/", assetServer.url)));
+function fetchAsset(url: URL): Response {
+  const response = embeddedAsset(url.pathname);
+  if (response != null) return withSecurityHeaders(response);
+  if (!isAssetPath(url.pathname)) {
+    const index = embeddedAsset("/");
+    if (index != null) return withSecurityHeaders(index);
+  }
+  return text("Not found", 404);
 }
 
 async function readJson(request: Request): Promise<unknown> {

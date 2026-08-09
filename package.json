@@ -34,7 +34,7 @@
     "check:lines": "node --no-warnings src/dev/check-line-limits.ts",
     "check:syntax": "find src test \\( -name '*.ts' -o -name '*.js' \\) -print0 | xargs -0 -n1 node --check && tsc --noEmit && tsc -p tsconfig.test.json",
     "build": "pnpm run build:server && vite build --config web/vite.config.ts && tsc --noEmit",
-    "build:binary": "pnpm run build && bun build --compile binary/spec-reviewer.ts --outfile build/spec-reviewer",
+    "build:binary": "pnpm run build && node scripts/generate-embedded-assets.js && bun build --compile binary/spec-reviewer.ts --outfile build/spec-reviewer",
     "build:server": "node -e \"require('node:fs').rmSync('build',{recursive:true,force:true})\" && tsc -p tsconfig.server.json",
     "binary:smoke": "node scripts/binary-smoke.js",
     "dev": "concurrently -k -n api,web \"node --no-warnings src/server.ts\" \"vite --config web/vite.config.ts --host 127.0.0.1\"",
