@@ -183,9 +183,12 @@ If the current file digest differs from the saved review digest, export includes
 a warning and the current digest.
 
 If an annotation anchor has one exact occurrence elsewhere, export marks the
-saved range and current range. If it occurs more than once, export marks it
-ambiguous and never silently selects the first occurrence. Anchor whitespace is
-exact apart from CRLF normalization because Markdown indentation is semantic.
+saved range and current range. If the exact text is gone, relocation may still
+use whitespace-normalized, heading-retitle, or unique surviving-fragment matches
+and mark the note `moved`. If two matches are equally plausible, export marks it
+ambiguous and never silently selects the first occurrence. `ok` and quoted
+evidence still require an exact CRLF-normalized match because Markdown
+indentation is semantic.
 Verified selected source is emitted as a fenced block without stripping numbers,
 blank lines, or relative indentation. Export and the read-only form field use
 the transient verified current anchor source, never a legacy client quote. If
