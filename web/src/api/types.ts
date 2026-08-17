@@ -13,10 +13,13 @@ export interface DocumentLine {
   sectionTitle: string | null
 }
 
+export type ReviewDocumentFormat = "markdown" | "source"
+
 export interface ReviewDocument {
   path: string
   title: string
   digest: string
+  format?: ReviewDocumentFormat
   lines: DocumentLine[]
   sections: Array<{ line: number; level: number; title: string }>
 }

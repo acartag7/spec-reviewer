@@ -30,6 +30,23 @@ test("recent reviews show the accumulated active time per document", () => {
   expect(screen.getByText(/1h 00m/)).toBeInTheDocument()
 })
 
+test("the start screen accepts the reviewable text set", () => {
+  render(
+    <StartScreen
+      defaultPath=""
+      reviews={[]}
+      loadingReviews={false}
+      onOpenPath={() => {}}
+      onOpenFile={() => {}}
+    />,
+  )
+  expect(screen.getByRole("heading", { name: "Review a local spec" })).toBeInTheDocument()
+  expect(document.querySelector("input[type='file']")).toHaveAttribute(
+    "accept",
+    ".md,.markdown,.yaml,.yml,.json,.toml,.txt",
+  )
+})
+
 test("a review with no active time omits the duration label", () => {
   render(
     <StartScreen

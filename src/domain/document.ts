@@ -1,6 +1,8 @@
 import { basename } from "node:path";
+import { assertReviewablePath, type ReviewDocumentFormat } from "./document-format.ts";
 import { contentDigest } from "./ids.ts";
 
+export type { ReviewDocumentFormat } from "./document-format.ts";
 export type LineKind = "heading" | "list" | "quote" | "code" | "blank" | "normal";
 
 export interface DocumentLine {
@@ -20,6 +22,7 @@ export interface ReviewDocument {
   path: string;
   title: string;
   digest: string;
+  format: ReviewDocumentFormat;
   lines: DocumentLine[];
   sections: DocumentSection[];
 }
@@ -58,9 +61,33 @@ export function parseMarkdownDocument(path: string, content: string): ReviewDocu
     path,
     title: firstH1?.title ?? basename(path),
     digest: contentDigest(content),
+    format: "markdown",
     lines,
     sections,
   };
+}
+
+export function parseSourceDocument(path: string, content: string): ReviewDocument {
+  const lines: DocumentLine[] = splitSourceText(content).lines.map((text, index) => ({
+    number: index + 1,
+    text,
+    kind: text.trim() === "" ? "blank" : "normal",
+    sectionTitle: null,
+  }));
+  return {
+    path,
+    title: basename(path),
+    digest: contentDigest(content),
+    format: "source",
+    lines,
+    sections: [],
+  };
+}
+
+export function parseReviewDocument(path: string, content: string): ReviewDocument {
+  return assertReviewablePath(path) === "markdown"
+    ? parseMarkdownDocument(path, content)
+    : parseSourceDocument(path, content);
 }
 
 export function sectionForLine(document: ReviewDocument, lineNumber: number): string | null {

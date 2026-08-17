@@ -51,7 +51,7 @@ test("invalid content is rejected before storage directories are created", async
   const invalid = { ...review, documentDigest: "bad" } as Review;
   await expectCode(store.save(invalid), "review_store_corrupt");
   await assert.rejects(lstat(join(storageDir, "reviews")), { code: "ENOENT" });
-  await assert.rejects(storeUploadedMarkdown(storageDir, "bad.txt", "text"));
+  await assert.rejects(storeUploadedMarkdown(storageDir, "bad.png", "text"));
   await assert.rejects(lstat(join(storageDir, "documents")), { code: "ENOENT" });
 });
 

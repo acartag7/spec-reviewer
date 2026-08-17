@@ -1,15 +1,19 @@
 const shared = [
-  "When you finish drafting or updating a Markdown plan/spec, hand it to the",
-  "human through Spec Reviewer before treating the spec as accepted.",
+  "When you finish drafting or updating a Markdown plan/spec, or another",
+  "supported text spec such as YAML, hand it to the human through Spec",
+  "Reviewer before treating the spec as accepted.",
   "",
   "## Workflow",
   "",
-  "1. Save the Markdown spec to disk.",
+  "1. Save the spec to disk.",
   "2. Run:",
   "",
   "   ```bash",
   "   spec-reviewer review path/to/spec.md --wait --json",
   "   ```",
+  "",
+  "   Non-Markdown files such as `.yaml` open in source view. Line notes,",
+  "   save/reopen, `--wait --json`, and Finish still work the same way.",
   "",
   "3. Wait for the human to click Finish Review or Cancel.",
   "4. If the command exits non-zero or returns `status: \"canceled\"`, stop and",
@@ -68,7 +72,7 @@ const shared = [
 const codexFrontmatter = [
   "---",
   "name: spec-reviewer",
-  "description: Use after drafting or updating Markdown specs or plans when human review feedback should be collected through the local Spec Reviewer app.",
+  "description: Use after drafting or updating Markdown or supported text specs when human review feedback should be collected through the local Spec Reviewer app.",
   "---",
   "",
 ].join("\n");
@@ -76,7 +80,7 @@ const codexFrontmatter = [
 const claudeFrontmatter = [
   "---",
   "name: spec-reviewer",
-  "description: Use after drafting or updating Markdown specs or plans when human review feedback should be collected through the local Spec Reviewer app.",
+  "description: Use after drafting or updating Markdown or supported text specs when human review feedback should be collected through the local Spec Reviewer app.",
   "---",
   "",
 ].join("\n");

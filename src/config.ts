@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import { reviewableExtensions } from "./domain/document-format.ts";
 
 export interface AppConfig {
   command: "review" | "sessions" | "open" | "skill";
@@ -91,7 +92,7 @@ export function loadConfig(
     throw new Error("open accepts only one session id");
   }
   if (waitForReview && defaultDocumentPath == null) {
-    throw new Error("--wait requires a Markdown path");
+    throw new Error("--wait requires a document path");
   }
   return {
     command,
@@ -135,12 +136,15 @@ function parsePort(value: string | undefined): number | null {
 function printHelpAndExit(): never {
   console.log([
     "Usage:",
-    "  spec-reviewer review [flags] <file.md>",
-    "  spec-reviewer [flags] <file.md>",
+    "  spec-reviewer review [flags] <file>",
+    "  spec-reviewer [flags] <file>",
     "  spec-reviewer sessions [--json]",
     "  spec-reviewer open [flags] <session-id>",
     "  spec-reviewer skill install --target codex|claude",
     "  spec-reviewer skill print --target codex|claude",
+    "",
+    `Reviewable files: ${reviewableExtensions.join(" ")}`,
+    "Markdown opens rendered. Other text files open in source view.",
     "",
     "Flags:",
     "  --host <host>             Loopback host to bind",
