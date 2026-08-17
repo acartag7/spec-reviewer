@@ -82,6 +82,38 @@ test("Finish still returns agent Markdown for a YAML review", async (t) => {
   assert.match(completion.status === "finished" ? completion.markdown : "", /port: 8080/);
 });
 
+test("HTTP upload fatal-decodes original YAML bytes", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "spec-reviewer-yaml-upload-"));
+  const docPath = join(dir, "plan.yaml");
+  await writeFile(docPath, yamlBody, "utf8");
+  const { base, server } = await startReview(dir, docPath, false);
+  t.after(() => server.close());
+
+  const opened = await json(`${base}/api/document-upload`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      name: "dropped.yaml",
+      bytes: Buffer.from("# comment\nname: demo\n").toString("base64"),
+    }),
+  });
+  assert.equal(opened.document.format, "source");
+  assert.equal(opened.document.lines[0]?.kind, "normal");
+  assert.equal(opened.document.lines[0]?.text, "# comment");
+
+  const rejected = await fetch(`${base}/api/document-upload`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      name: "dropped.yaml",
+      bytes: Buffer.from([0x80, 0x81, 0x82]).toString("base64"),
+    }),
+  });
+  assert.equal(rejected.status, 400);
+  const body = await rejected.json() as { error: { message: string } };
+  assert.equal(body.error.message, "Binary files cannot be reviewed");
+});
+
 async function startReview(dir: string, docPath: string, wait: boolean) {
   const config: AppConfig = {
     host: "127.0.0.1",

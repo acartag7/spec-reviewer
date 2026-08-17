@@ -10,7 +10,7 @@ import { TopBar } from "@/components/TopBar"
 import { Workspace } from "@/components/Workspace"
 import { createAnnotation, formFromAnnotation, hasAnnotationDraft, removeAnnotation, upsertAnnotation } from "@/lib/review-utils"
 import type { AnnotationFormValue } from "@/lib/review-utils"
-import { isReviewableFile } from "@/lib/path-utils"
+import { readDroppedReviewFile } from "@/lib/path-utils"
 import { NO_SELECTION } from "@/lib/selection-utils"
 import { recoverFailedSave } from "@/lib/save-recovery"
 import { useActiveReviewTime } from "@/lib/use-active-review-time"
@@ -134,8 +134,7 @@ export function ReviewerPage() {
   })
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
-      if (!isReviewableFile(file.name)) throw new Error("Drop a Markdown or supported text file")
-      return api.uploadDocument({ name: file.name, content: await file.text() })
+      return api.uploadDocument(await readDroppedReviewFile(file))
     },
     onSuccess: (result) => {
       applyOpenResult(result)

@@ -35,3 +35,28 @@ export function isMarkdownFile(name: string): boolean {
   const lower = name.toLowerCase()
   return lower.endsWith(".md") || lower.endsWith(".markdown")
 }
+
+export async function readDroppedReviewFile(file: File): Promise<{ name: string; bytes: string }> {
+  if (!isReviewableFile(file.name)) throw new Error("Drop a Markdown or supported text file")
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  decodeDroppedBytes(bytes)
+  return { name: file.name, bytes: encodeBase64(bytes) }
+}
+
+function decodeDroppedBytes(bytes: Uint8Array): void {
+  if (bytes.includes(0)) throw new Error("Binary files cannot be reviewed")
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+  } catch {
+    throw new Error("Binary files cannot be reviewed")
+  }
+}
+
+function encodeBase64(bytes: Uint8Array): string {
+  let binary = ""
+  const chunk = 0x8000
+  for (let offset = 0; offset < bytes.length; offset += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk))
+  }
+  return btoa(binary)
+}

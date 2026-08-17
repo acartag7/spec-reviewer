@@ -37,7 +37,7 @@ export const api = {
     const encoded = encodeURIComponent(path)
     return request<OpenDocumentResult>("GET", `/api/document?path=${encoded}`)
   },
-  uploadDocument: (file: { name: string; content: string }) => {
+  uploadDocument: (file: { name: string; content?: string; bytes?: string }) => {
     return request<OpenDocumentResult>("POST", "/api/document-upload", file)
   },
   saveReview: (review: ReviewDraft) => request<Review>("POST", "/api/review", {

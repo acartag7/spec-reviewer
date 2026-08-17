@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { loadConfig } from "../src/config.ts";
 import { AppError } from "../src/domain/errors.ts";
 import { FileDocumentReader } from "../src/infrastructure/file-document-reader.ts";
-import { storeUploadedMarkdown } from "../src/interfaces/http/uploads.ts";
+import { readUpload, storeUploadedMarkdown } from "../src/interfaces/http/uploads.ts";
 
 test("FileDocumentReader allows the explicit text set and rejects binaries", async () => {
   const dir = await mkdtemp(join(tmpdir(), "spec-reviewer-reader-"));
@@ -50,6 +50,22 @@ test("uploads accept the same text set and reject binaries", async () => {
   await assert.rejects(storeUploadedMarkdown(dir, "plan.yaml", "a\0b"), (error) => (
     error instanceof AppError && error.message === "Binary files cannot be reviewed"
   ));
+});
+
+test("upload bytes are fatal-decoded before the document is stored", () => {
+  const yaml = readUpload({
+    name: "plan.yaml",
+    bytes: Buffer.from("# comment\nname: demo\n").toString("base64"),
+  });
+  assert.equal(yaml.content, "# comment\nname: demo\n");
+  assert.throws(
+    () => readUpload({ name: "plan.yaml", bytes: Buffer.from([0x80, 0x81, 0x82]).toString("base64") }),
+    (error: unknown) => error instanceof AppError && error.message === "Binary files cannot be reviewed",
+  );
+  assert.throws(
+    () => readUpload({ name: "plan.yaml", bytes: "not-base64" }),
+    (error: unknown) => error instanceof AppError && error.message === "bytes must be base64",
+  );
 });
 
 test("--wait requires a document path", () => {
