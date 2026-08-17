@@ -13,7 +13,7 @@ spec-reviewer review path/to/spec.md
 Homebrew installs a bundled binary. You do not need Node, pnpm, Bun, or project
 dependencies to use the app.
 
-![Spec Reviewer showing a local review with open notes and agent export](docs/assets/screenshot.jpg)
+![Spec Reviewer showing a local review with the document reader and open notes](docs/assets/screenshot.jpg)
 
 ## Agent Handoff
 
