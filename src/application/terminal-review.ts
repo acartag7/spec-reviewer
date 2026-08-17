@@ -1,4 +1,4 @@
-import { parseMarkdownDocument } from "../domain/document.ts";
+import { parseReviewDocument } from "../domain/document.ts";
 import { AppError } from "../domain/errors.ts";
 import {
   createEmptyReview,
@@ -84,7 +84,7 @@ async function persistTerminalMetrics(
 }
 
 export function exportRound(round: ReviewRound): ReviewExportResult {
-  const document = parseMarkdownDocument(round.documentPath, round.sourceText);
+  const document = parseReviewDocument(round.documentPath, round.sourceText);
   const review = withResolvedAnchors(document, reviewFromRound(round));
   return {
     markdown: exportReviewMarkdown(document, review),

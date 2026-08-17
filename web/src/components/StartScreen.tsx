@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { RecentReview } from "@/api/types"
-import { shortDate, sourceStateLabel } from "@/lib/path-utils"
+import { reviewableFileAccept, shortDate, sourceStateLabel } from "@/lib/path-utils"
 import { cn, formatActiveDuration } from "@/lib/utils"
 
 interface StartScreenProps {
@@ -54,9 +54,9 @@ export function StartScreen({
             <FileCheck2 className="size-5" />
           </span>
           <div className="grid gap-2">
-            <h1 className="max-w-xl font-heading text-3xl font-semibold tracking-tight">Review a Markdown spec</h1>
+            <h1 className="max-w-xl font-heading text-3xl font-semibold tracking-tight">Review a local spec</h1>
             <p className="max-w-lg text-sm leading-6 text-muted-foreground">
-              Read the rendered document, anchor feedback to source lines, and return one clean handoff to the agent.
+              Read rendered Markdown or review YAML and other text in source view. Anchor feedback to lines and return one clean handoff to the agent.
             </p>
           </div>
           <p className="text-xs text-muted-foreground">Local only · Source anchored · Agent ready</p>
@@ -85,11 +85,11 @@ export function StartScreen({
           <Button type="button" variant="ghost" asChild>
             <label>
               <Upload />
-              Choose Markdown file
+              Choose a reviewable file
               <input
                 ref={fileInput}
                 type="file"
-                accept=".md,.markdown"
+                accept={reviewableFileAccept}
                 hidden
                 onChange={() => {
                   const file = fileInput.current?.files?.item(0)

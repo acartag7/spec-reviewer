@@ -21,6 +21,16 @@ export function sourceStateLabel(state: string): string {
   return "current"
 }
 
+// Keep in sync with src/domain/document-format.ts
+const reviewableSuffixes = [".md", ".markdown", ".yaml", ".yml", ".json", ".toml", ".txt"]
+
+export const reviewableFileAccept = reviewableSuffixes.join(",")
+
+export function isReviewableFile(name: string): boolean {
+  const lower = name.toLowerCase()
+  return reviewableSuffixes.some((suffix) => lower.endsWith(suffix))
+}
+
 export function isMarkdownFile(name: string): boolean {
   const lower = name.toLowerCase()
   return lower.endsWith(".md") || lower.endsWith(".markdown")

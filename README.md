@@ -31,8 +31,8 @@ remain immutable and do not create a comparison baseline.
 
 ## What It Does
 
-- Opens local `.md` and `.markdown` files.
-- Lets you review rendered Markdown or source lines.
+- Opens local `.md`, `.markdown`, `.yaml`, `.yml`, `.json`, `.toml`, and `.txt` files.
+- Lets you review rendered Markdown or source lines. Non-Markdown files open in source view.
 - Keeps Markdown tables readable and renders Mermaid diagrams as sanitized static SVG.
 - Shows completed-round changes as a bounded unified red/green diff.
 - Adds line, block, or selected-text notes.
@@ -145,7 +145,7 @@ actions. Editing a note preserves its lifecycle status and agent action.
 
 ## Security Model
 
-The API can read local Markdown files by path, so the server binds only to
+The API can read local reviewable text files by path, so the server binds only to
 loopback hosts. It rejects non-loopback Host/Origin headers and sends a CSP.
 Rendered Markdown is sanitized before insertion. Artifact previews render in
 click-to-render sandboxed iframes with `sandbox=""`.

@@ -13,7 +13,7 @@ test("renders the top bar and start screen", async () => {
   render(<App />)
 
   expect(await screen.findByText("Spec Reviewer")).toBeInTheDocument()
-  expect(await screen.findByText("Review a Markdown spec")).toBeInTheDocument()
+  expect(await screen.findByText("Review a local spec")).toBeInTheDocument()
   expect(await screen.findByText("No saved reviews yet.")).toBeInTheDocument()
 })
 
